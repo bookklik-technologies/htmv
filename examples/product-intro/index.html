@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Meet HTMV in 60 seconds, with real media, templates, timing, and plugins."><title>Meet HTMV · Examples</title><link rel="icon" href="../shared/brand/icon.svg"><link rel="stylesheet" href="../shared/studio.css"></head><body>
+<hv-composition id="product-intro" width="1280" height="720" fps="30" duration="1800f" background="#333333">
+      <hv-assets>
+<hv-asset id="orbit" kind="video" src="../shared/media/orbit.mp4"></hv-asset>
+<hv-asset id="ribbons" kind="video" src="../shared/media/ribbons.mp4"></hv-asset>
+        <hv-asset id="htmv-logo" kind="image" src="../shared/brand/logo.svg"></hv-asset>
+        <hv-asset id="outfit-regular" kind="font" src="../shared/brand/Outfit.ttf" family="Outfit" weight="400"></hv-asset>
+        <hv-asset id="outfit-bold" kind="font" src="../shared/brand/Outfit.ttf" family="Outfit" weight="700"></hv-asset>
+      </hv-assets>
+      <script type="application/json" data-hv-props>
+        {"features":[
+          {"id":"scenes","number":"01","title":"Scenes","detail":"Compose your story","color":"#2563EB","textColor":"#FFFFFF"},
+          {"id":"motion","number":"02","title":"Motion","detail":"Bring ideas to life","color":"#00FF99","textColor":"#333333"},
+          {"id":"data","number":"03","title":"Data","detail":"Make every version yours","color":"#FFC000","textColor":"#333333"}
+        ]}
+      </script>
+      <style>
+        .frame { position:absolute; left:0; top:0; width:1280px; height:720px; overflow:hidden; color:#f5f5f5; font-family:Outfit,sans-serif; }
+        .rule { position:absolute; left:64px; top:96px; width:1152px; height:1px; background-color:#555555; }
+        .brand-logo { position:absolute; left:64px; top:34px; width:40px; height:40px; }
+        .brand { position:absolute; left:117px; top:37px; width:180px; height:40px; font-size:27px; font-weight:700; color:#f5f5f5; }
+        .edition { position:absolute; left:820px; top:44px; width:396px; height:28px; font-size:14px; text-align:right; color:#c5c5c5; }
+        .chapter { position:absolute; left:64px; top:136px; width:1100px; height:30px; font-size:17px; color:#00ff99; }
+        .title { position:absolute; left:64px; top:197px; width:1100px; height:246px; font-size:100px; line-height:1.02; font-weight:700; }
+        .subtitle { position:absolute; left:69px; top:478px; width:1060px; height:80px; font-size:26px; line-height:1.4; color:#c5c5c5; }
+        .bottom { position:absolute; left:64px; top:647px; width:1000px; height:30px; font-size:15px; color:#c5c5c5; }
+        .badge { position:absolute; left:1096px; top:639px; width:120px; height:34px; border:1px solid #666666; border-radius:17px; color:#00ff99; font-size:14px; text-align:center; padding-top:7px; }
+        .accent { color:#00ff99; }
+        .panel { position:absolute; left:650px; top:188px; width:566px; height:390px; border:1px solid #555555; border-radius:16px; background-color:#292929; overflow:hidden; }
+        .panel-label { position:absolute; left:26px; top:22px; width:500px; height:30px; font-family:monospace; font-size:15px; color:#c5c5c5; }
+        .panel-rule { position:absolute; left:0; top:65px; width:566px; height:1px; background-color:#555555; }
+        .split-title { position:absolute; left:64px; top:212px; width:550px; height:240px; font-size:76px; line-height:1.06; font-weight:700; }
+        .split-subtitle { position:absolute; left:67px; top:480px; width:510px; height:100px; font-size:24px; line-height:1.45; color:#c5c5c5; }
+        .code { position:absolute; left:28px; width:515px; height:38px; font-family:monospace; font-size:19px; white-space:pre; color:#00ff99; }
+        .cards { position:absolute; left:64px; top:333px; width:1152px; height:250px; display:flex; gap:24px; }
+        .card { position:relative; width:368px; height:250px; border-radius:16px; padding:26px; background-color:#00ff99; color:#333333; }
+        .card-number { width:310px; height:40px; font-family:monospace; font-size:19px; }
+        .card-title { position:absolute; left:26px; top:102px; width:310px; height:64px; font-size:49px; font-weight:700; }
+        .card-detail { position:absolute; left:26px; top:186px; width:316px; height:36px; font-size:20px; }
+        .export-file { position:absolute; left:165px; top:90px; width:236px; height:190px; border-radius:15px; background-color:#ffc000; }
+        .file-label { position:absolute; left:24px; top:63px; width:188px; height:60px; font-family:monospace; font-size:43px; font-weight:700; text-align:center; color:#333333; }
+        .export-note { position:absolute; left:25px; top:312px; width:516px; height:50px; font-size:22px; text-align:center; color:#c5c5c5; }
+        .final-logo { position:absolute; left:64px; top:196px; width:142px; height:142px; }
+        .final-mark { position:absolute; left:242px; top:172px; width:900px; height:175px; font-size:170px; line-height:1; font-weight:700; color:#f5f5f5; }
+        .final-title { position:absolute; left:71px; top:391px; width:1100px; height:95px; font-size:55px; font-weight:700; }
+        .final-subtitle { position:absolute; left:74px; top:516px; width:1100px; height:55px; font-family:monospace; font-size:23px; color:#c5c5c5; }
+        .film-progress { position:absolute; left:0; top:716px; width:1280px; height:4px; background-color:#00ff99; transform-origin:0px 0px; }
+      </style>
+
+      <template id="intro-card" data-hv-component><div class="card" data-hv-style-background-color="props.color" data-hv-style-color="props.textColor"><p class="card-number" data-hv-text="props.number"></p><h3 class="card-title" data-hv-text="props.title"></h3><p class="card-detail" data-hv-text="props.detail"></p></div></template>
+<hv-series>
+        <!-- 00:00–00:07 / The hook -->
+        <hv-scene id="opening" data-chapter="Meet" duration="210f">
+          <div class="frame">
+            <p class="chapter">INTRODUCING / HYPERTEXT MARKUP VIDEO</p>
+            <h1 id="opening-title" class="title">Write HTML.<br>Make video.</h1>
+            <p id="opening-copy" class="subtitle">Meet HTMV. A declarative video library<br>that runs entirely in your browser.</p>
+            <p class="bottom">One composition. From markup to motion.</p>
+            <p class="badge">00 — HELLO</p>
+          </div>
+          <hv-animation target="#opening-title" property="translate-y" duration="36f" from="32px" to="0px" easing="ease-out" fill="both"></hv-animation>
+          <hv-animation target="#opening-copy" property="opacity" start="24f" duration="30f" from="0" to="1" fill="both"></hv-animation>
+        </hv-scene>
+        <hv-transition type="crossfade" duration="15f"></hv-transition>
+
+        <!-- 00:06–00:14 / Familiar authoring -->
+        <hv-scene id="markup" data-chapter="Compose" duration="240f">
+          <div class="frame">
+            <p class="chapter">01 / START WITH WHAT YOU KNOW</p>
+            <h2 class="split-title">Your markup.<br>Real motion.</h2>
+            <p class="split-subtitle">Compose scenes with HTML.<br>Style them with supported CSS.<br>Animate with declarative tags.</p>
+            <div id="code-panel" class="panel">
+              <p class="panel-label">intro.html</p><div class="panel-rule"></div>
+              <p id="compose-live" style="position:absolute;left:28px;top:82px;width:510px;height:60px;font-size:40px;font-weight:700;color:#ffffff;">Hello, motion.</p><p class="code" style="top:165px;font-size:16px;">&lt;hv-animation</p><p class="code" style="top:200px;font-size:16px;">  target="#compose-live"</p><p class="code" style="top:235px;font-size:16px;">  property="opacity"</p><p class="code" style="top:270px;font-size:16px;">  from="0" to="1" duration="60f"</p><p class="code" style="top:305px;font-size:16px;">  fill="both"&gt;&lt;/hv-animation&gt;</p>
+            </div>
+            <p class="bottom">Readable source. Editable ideas.</p><p class="badge">01 — WRITE</p>
+          </div>
+          <hv-animation target="#compose-live" property="opacity" duration="60f" from="0" to="1" fill="both"></hv-animation>
+<hv-animation target="#code-panel" property="translate-x" duration="30f" from="36px" to="0px" easing="ease-out" fill="both"></hv-animation>
+        </hv-scene>
+        <hv-transition type="slide" direction="left" duration="15f"></hv-transition>
+
+        <!-- 00:14–00:23 / Deterministic timeline -->
+        <hv-scene id="timing" data-chapter="Time" duration="285f">
+<div class="frame"><p class="chapter">02 / TIME IS PART OF THE MARKUP</p><h2 class="split-title">Hold a frame.<br>Loop the rest.</h2><p class="split-subtitle">Finite loops and frozen time.<br>Jump straight to a frame.<br>No playback history needed.</p><div class="panel" style="height:350px;">
+<hv-freeze at="2s" duration="285f"><hv-video src="asset:orbit" duration="360f" trim-in="0s" trim-out="12s" audio="mute" style="position:absolute;left:0;top:0;width:566px;height:350px;object-fit:cover;"></hv-video></hv-freeze>
+<hv-loop iteration-duration="57f" count="5"><p id="time-loop" style="position:absolute;left:35px;top:130px;width:500px;height:80px;font-size:58px;font-weight:700;color:#ffffff;">Still. Moving.</p><hv-animation target="#time-loop" property="opacity" duration="57f"><hv-keyframe offset="0" value="0"></hv-keyframe><hv-keyframe offset="0.3" value="1"></hv-keyframe><hv-keyframe offset="0.7" value="1"></hv-keyframe><hv-keyframe offset="1" value="0"></hv-keyframe></hv-animation></hv-loop>
+</div><p class="bottom">The footage is frozen. The title repeats five times.</p><p class="badge">02 / TIME</p></div>
+</hv-scene>
+        <hv-transition type="wipe" direction="up" duration="15f"></hv-transition>
+
+        <!-- 00:23–00:31 / Real data bindings and repeated cards -->
+        <hv-scene id="templates" data-chapter="Personalize" duration="270f">
+          <div class="frame">
+            <p class="chapter">03 / CREATE ONCE. MAKE IT YOURS.</p>
+            <h2 class="title" style="top:201px;font-size:64px;height:100px;">One template. New possibilities.</h2>
+            <div class="cards">
+              <template data-hv-each="props.features" data-hv-as="item" data-hv-key="item.id">
+                <hv-use template="#intro-card" duration="270f" data-hv-attr-props="item"></hv-use>
+              </template>
+            </div>
+            <p class="bottom">JSON props + reusable templates + data bindings.</p><p class="badge">03 — ADAPT</p>
+          </div>
+          <hv-animation target=".card" property="translate-y" duration="40f" from="45px" to="0px" easing="ease-out" fill="both"></hv-animation>
+        </hv-scene>
+        <hv-transition type="crossfade" duration="15f"></hv-transition>
+
+        <!-- 00:31–00:40 / Decoded media and caption cues -->
+        <hv-scene id="preview" data-chapter="Media" duration="285f">
+<div class="frame"><p class="chapter">04 / REAL MEDIA. ONE TIMELINE.</p><h2 class="split-title">Cut. Blend.<br>Tell a story.</h2><p class="split-subtitle">Trim video. Layer titles.<br>Add music and captions.<br>Mix in the edited story demo.</p><div class="panel" style="height:350px;">
+<hv-series><hv-scene duration="150f"><hv-video src="asset:orbit" duration="150f" trim-in="2s" trim-out="7s" audio="mute" style="position:absolute;left:0;top:0;width:566px;height:350px;object-fit:cover;"></hv-video></hv-scene><hv-transition type="crossfade" duration="15f"></hv-transition><hv-scene duration="150f"><hv-video src="asset:ribbons" duration="150f" trim-in="0s" trim-out="5s" audio="mute" style="position:absolute;left:0;top:0;width:566px;height:350px;object-fit:cover;"></hv-video></hv-scene></hv-series>
+</div><p class="bottom">This panel decodes local video. The film stays silent.</p><p class="badge">04 / MEDIA</p></div>
+<hv-captions duration="285f" style="font-family:Outfit;font-size:22px;color:#ffffff;"><hv-cue start="15f" end="120f">Real video, trimmed and layered with HTML.</hv-cue><hv-cue start="150f" end="270f">A crossfade joins two prepared local clips.</hv-cue></hv-captions>
+</hv-scene>
+        <hv-transition type="slide" direction="right" duration="15f"></hv-transition>
+
+        <!-- 00:40–00:46 / Export -->
+        <hv-scene id="export" data-chapter="Export" duration="195f">
+          <div class="frame">
+            <p class="chapter">05 / READY TO LEAVE THE TAB</p>
+            <h2 class="split-title">From browser<br>to video file.</h2>
+            <p class="split-subtitle">Export MP4 or WebM using<br>supported browser codecs.<br>No render server required.</p>
+            <div class="panel">
+              <p class="panel-label">BROWSER EXPORT</p><div class="panel-rule"></div>
+              <div id="export-file" class="export-file"><p class="file-label">VIDEO</p></div>
+              <p class="export-note">.mp4 / .webm</p>
+            </div>
+            <p class="bottom">Author → preview → export. All in your browser.</p><p class="badge">05 — SHARE</p>
+          </div>
+          <hv-animation target="#export-file" property="translate-y" duration="36f" from="28px" to="0px" easing="ease-out" fill="both"></hv-animation>
+        </hv-scene>
+        <hv-transition type="wipe" direction="down" duration="15f"></hv-transition>
+
+        <!-- 00:46–00:54 / Real seeded plugin rendering -->
+        <hv-scene id="more" data-chapter="Extend" duration="240f">
+<div class="frame"><canvas width="1280" height="720" data-hv-plugin="htmv-particles" data-hv-plugin-props='{"count":75}' style="position:absolute;left:0;top:0;width:1280px;height:720px;"></canvas><p class="chapter">06 / YOUR RENDERER. OUR CLOCK.</p><h2 class="title" style="top:215px;font-size:94px;">Extend the canvas.</h2><p class="subtitle" style="top:435px;">This scene is a custom particle plugin.<br>Seeded randomness. Sampled time. Repeatable frames.</p><p class="bottom">Open the plugin example and check shuffled-frame rendering yourself.</p><p class="badge">06 / EXTEND</p></div>
+</hv-scene>
+        <hv-transition type="crossfade" duration="15f"></hv-transition>
+
+        <!-- 00:54–01:00 / End card -->
+        <hv-scene id="closing" data-chapter="Create" duration="180f">
+          <div class="frame">
+            <p class="chapter">HYPERTEXT MARKUP VIDEO</p>
+            <img class="final-logo" src="asset:htmv-logo" alt="HTMV timeline mark">
+            <h2 id="closing-mark" class="final-mark">HTMV</h2>
+            <p class="final-title">Your next video starts with HTML.</p>
+            <p class="final-subtitle">Write. Preview. Export.</p>
+            <p class="bottom">This entire introduction was made with HTMV.</p><p class="badge">YOUR TURN</p>
+          </div>
+          <hv-animation target="#closing-mark" property="translate-y" duration="36f" from="24px" to="0px" easing="ease-out" fill="both"></hv-animation>
+        </hv-scene>
+      </hv-series>
+
+      <!-- Persistent identity and a frame-exact progress line. -->
+      <img class="brand-logo" src="asset:htmv-logo" alt=""><p class="brand">HTMV</p><p class="edition">HTML IN. VIDEO OUT. / PRODUCT INTRODUCTION</p><div class="rule"></div>
+      <div id="film-progress" class="film-progress"></div>
+      <hv-animation target="#film-progress" property="scale-x" duration="1799f" from="0.001" to="1" fill="both"></hv-animation>
+    </hv-composition>
+<script type="module" src="./intro.js"></script>
+</body></html>

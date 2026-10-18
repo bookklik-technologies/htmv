@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build outputs
+packages/*/dist/
+examples/shared/htmv/*.js
+examples/shared/htmv/*.js.map
+
+# VitePress
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Test artifacts
+test-results/
+playwright-report/
+.vitest-cache/
+coverage/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor/OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

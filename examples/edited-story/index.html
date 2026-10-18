@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Edited story · HTMV examples</title><link rel="icon" href="../shared/brand/icon.svg"><link rel="stylesheet" href="../shared/studio.css"></head><body>
+  <hv-composition id="story" width="1280" height="720" fps="30" duration="300f" background="#333333">
+    <hv-assets>
+      <hv-asset id="outfit" kind="font" src="../shared/brand/Outfit.ttf" family="Outfit" weight="700"></hv-asset>
+      <hv-asset id="clip-a" kind="video" src="../shared/media/orbit.mp4"></hv-asset><hv-asset id="clip-b" kind="video" src="../shared/media/ribbons.mp4"></hv-asset>
+      <hv-asset id="music" kind="audio" src="../shared/media/pulse.wav"></hv-asset><hv-asset id="chime" kind="audio" src="../shared/media/chime.wav"></hv-asset>
+    </hv-assets>
+    <style>
+      .footage { position:absolute; left:0; top:0; width:1280px; height:720px; object-fit:cover; }
+      .title { position:absolute; left:80px; top:85px; width:1120px; height:180px; font-family:Outfit; font-weight:700; font-size:78px; line-height:1.05; color:#ffffff; }
+      .caption { font-family:Outfit; font-weight:700; font-size:29px; line-height:1.3; color:#ffffff; }
+      .label { position:absolute; left:85px; top:35px; width:1000px; height:40px; font-family:Outfit; font-size:19px; color:#00ff99; }
+    </style>
+    <hv-series>
+      <hv-scene duration="150f"><hv-video class="footage" src="asset:clip-a" duration="150f" trim-in="2s" trim-out="7s" audio="mute"></hv-video>
+        <p class="label">01 / TRIM. LAYER. ANIMATE.</p><h1 id="first-title" class="title">A story starts here.</h1>
+        <hv-animation target="#first-title" property="opacity" duration="24f" from="0" to="1" fill="both"></hv-animation><hv-animation target="#first-title" property="translate-y" duration="24f" from="40px" to="0px" easing="ease-out" fill="both"></hv-animation>
+      </hv-scene>
+      <hv-transition type="crossfade" duration="15f"></hv-transition>
+      <hv-scene duration="165f"><hv-video class="footage" src="asset:clip-b" duration="165f" trim-in="0" trim-out="5.5s" audio="mute"></hv-video>
+        <p class="label">02 / MIX. CAPTION. EXPORT.</p><h1 id="second-title" class="title">Made in your browser.</h1><hv-animation target="#second-title" property="opacity" duration="30f" from="0" to="1" fill="both"></hv-animation>
+      </hv-scene>
+    </hv-series>
+    <hv-audio id="music" src="asset:music" duration="300f" trim-in="0" trim-out="2s" repeat="true" gain="0.25" fade-in="15f" fade-out="30f"></hv-audio>
+    <hv-audio src="asset:chime" start="135f" duration="60f" gain="0.3" fade-out="20f"></hv-audio>
+    <hv-captions class="caption" duration="300f"><hv-cue start="0" end="60f">A story starts here.</hv-cue><hv-cue start="75f" end="135f">Video, titles, and a repeating music bed.</hv-cue><hv-cue start="150f" end="285f">Two scenes. One browser. Your finished film.</hv-cue></hv-captions>
+  </hv-composition>
+  <script type="module" src="./app.js"></script>
+</body></html>

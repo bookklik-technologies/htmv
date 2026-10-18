@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hold & loop · HTMV examples</title><link rel="icon" href="../shared/brand/icon.svg"><link rel="stylesheet" href="../shared/studio.css"></head><body>
+  <hv-composition id="hold-and-loop" width="1280" height="720" fps="30000/1001" duration="300f" background="#333333">
+    <hv-assets><hv-asset id="outfit" kind="font" src="../shared/brand/Outfit.ttf" family="Outfit" weight="700"></hv-asset><hv-asset id="footage" kind="video" src="../shared/media/orbit.mp4"></hv-asset></hv-assets>
+    <style>
+      .full { position:absolute; left:0; top:0; width:1280px; height:720px; object-fit:cover; }
+      .badge { position:absolute; left:80px; top:300px; width:1120px; height:150px; font-family:Outfit; font-weight:700; font-size:86px; line-height:1.1; color:#ffffff; }
+      .label { position:absolute; left:85px; top:100px; width:1100px; height:50px; font-family:Outfit; font-weight:700; font-size:22px; color:#00ff99; }
+    </style>
+    <hv-freeze at="2s" duration="300f"><hv-video class="full" src="asset:footage" duration="360f" trim-in="0" trim-out="12s" audio="mute"></hv-video></hv-freeze>
+    <p class="label">HELD FOOTAGE / INDEPENDENT MOTION / 30000/1001 FPS</p>
+    <hv-loop iteration-duration="60f" count="5"><p id="badge" class="badge">Hold the moment.</p>
+      <hv-animation target="#badge" property="opacity" duration="60f"><hv-keyframe offset="0" value="0"></hv-keyframe><hv-keyframe offset="0.25" value="1"></hv-keyframe><hv-keyframe offset="0.75" value="1"></hv-keyframe><hv-keyframe offset="1" value="0"></hv-keyframe></hv-animation>
+      <hv-animation target="#badge" property="translate-y" duration="60f" from="30px" to="-20px" easing="ease-out"></hv-animation>
+    </hv-loop>
+  </hv-composition>
+  <script type="module" src="./app.js"></script>
+</body></html>

@@ -1,0 +1,30 @@
+{
+  "name": "@htmv/htmv",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./auto": "./dist/auto.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@htmv/core": "0.1.0",
+    "@htmv/compiler": "0.1.0",
+    "@htmv/layout-dom": "0.1.0",
+    "@htmv/renderer-canvas": "0.1.0",
+    "@htmv/audio": "0.1.0",
+    "@htmv/media": "0.1.0",
+    "@htmv/media-mediabunny": "0.1.0",
+    "@htmv/exporter": "0.1.0",
+    "@htmv/player": "0.1.0",
+    "@htmv/elements": "0.1.0",
+    "@htmv/plugins": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

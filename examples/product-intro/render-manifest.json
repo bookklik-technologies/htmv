@@ -1,0 +1,93 @@
+{
+  "languageVersion": "htmv-language-1",
+  "irSchemaVersion": "1",
+  "libraryVersion": "0.1.0",
+  "dependencies": [
+    {
+      "name": "@htmv/media-mediabunny",
+      "version": "mediabunny@1.61.6"
+    },
+    {
+      "name": "mediabunny",
+      "version": "1.61.6"
+    }
+  ],
+  "revisionHash": "cc9580332638c07bc70e39146e8692a47b226f10df0be9a52ceb29e157c1605b",
+  "sourceHash": "cc9580332638c07bc70e39146e8692a47b226f10df0be9a52ceb29e157c1605b",
+  "styleHash": "123cc62a16b4579017d0b17ba3fb7251d24dbc3b770ce6ed2386a967a9995e28",
+  "propsHash": "c836362603a65b60f5bc4ef2213f4814c8d77f23e1c595ff90d4c439d2a63759",
+  "assets": [
+    {
+      "id": "orbit",
+      "logicalId": "orbit",
+      "contentHash": "571b652f44c0868f873720322e716cad654803ed9a86cb6565d2fd1d0479fabb"
+    },
+    {
+      "id": "ribbons",
+      "logicalId": "ribbons",
+      "contentHash": "dba19ef6e14e5688ea5b402707d64e3d42a21244e4035611c72df28684b9278f"
+    },
+    {
+      "id": "htmv-logo",
+      "logicalId": "htmv-logo",
+      "contentHash": "30fe64d0dfa8a687e5bde382ad798126dabe865eee88ec3cff9256685f098b72"
+    },
+    {
+      "id": "outfit-regular",
+      "logicalId": "outfit-regular",
+      "contentHash": "fc7287273e66929776e2ba54f144fe699080bec29f61bf649d70d871468aeade"
+    },
+    {
+      "id": "outfit-bold",
+      "logicalId": "outfit-bold",
+      "contentHash": "fc7287273e66929776e2ba54f144fe699080bec29f61bf649d70d871468aeade"
+    }
+  ],
+  "fonts": [
+    {
+      "family": "Outfit",
+      "contentHash": "fc7287273e66929776e2ba54f144fe699080bec29f61bf649d70d871468aeade"
+    },
+    {
+      "family": "Outfit",
+      "contentHash": "fc7287273e66929776e2ba54f144fe699080bec29f61bf649d70d871468aeade"
+    }
+  ],
+  "width": 1280,
+  "height": 720,
+  "fps": {
+    "numerator": 30,
+    "denominator": 1
+  },
+  "fullDurationFrames": 1800,
+  "exportedRange": {
+    "from": 0,
+    "toExclusive": 1800
+  },
+  "container": "mp4",
+  "mimeType": "video/mp4",
+  "videoEncoderConfig": {
+    "codec": "avc",
+    "bitrate": 2500000,
+    "keyframeIntervalSeconds": 2
+  },
+  "audioEncoderConfig": null,
+  "outputFrameCount": 1800,
+  "outputSampleCount": 0,
+  "timestampPolicy": "endpoint-roundhalfup-microseconds-v1",
+  "colorProfile": "opaque-8bit-sdr",
+  "syncCertification": "certified",
+  "warnings": [],
+  "outputBytes": 6001687,
+  "resourceHighWaterMarks": {
+    "encoderQueueMax": null,
+    "decodedFramesMax": 3,
+    "pcmBlockBytesMax": 0,
+    "muxQueueBytesMax": null
+  },
+  "environment": {
+    "userAgentHash": "1b61d8fdd04187f9e703717cdb355def8cda48b14e199cccb3ab35f724e9449e",
+    "redacted": true
+  },
+  "status": "complete"
+}

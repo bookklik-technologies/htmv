@@ -1,0 +1,100 @@
+@font-face {
+  font-family: 'Outfit';
+  src: url('/fonts/Outfit.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --htmv-primary: #2563eb;
+  --htmv-secondary: #00ff99;
+  --htmv-tertiary: #ffc000;
+  --htmv-background: #333333;
+
+  --vp-font-family-base: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --vp-c-brand-1: #1d4ed8;
+  --vp-c-brand-2: #1e40af;
+  --vp-c-brand-3: var(--htmv-primary);
+  --vp-c-brand-soft: rgb(37 99 235 / 10%);
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f4f5f6;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #f4f5f6;
+  --vp-c-text-1: var(--htmv-background);
+  --vp-c-text-2: #555555;
+  --vp-c-text-3: #666666;
+  --vp-c-border: #c7c9cc;
+  --vp-c-divider: #e1e3e6;
+  --vp-c-gutter: #e1e3e6;
+  --vp-c-tip-1: #007a49;
+  --vp-c-tip-2: #008751;
+  --vp-c-tip-3: var(--htmv-secondary);
+  --vp-c-tip-soft: rgb(0 255 153 / 9%);
+  --vp-c-warning-1: #805d00;
+  --vp-c-warning-2: #936b00;
+  --vp-c-warning-3: var(--htmv-tertiary);
+  --vp-c-warning-soft: rgb(255 192 0 / 12%);
+
+  --vp-button-brand-bg: var(--htmv-primary);
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-bg: #1d4ed8;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-bg: #1e40af;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-home-hero-name-color: var(--vp-c-text-1);
+  --vp-nav-logo-height: 30px;
+}
+
+.dark {
+  --vp-c-brand-1: #8ab4ff;
+  --vp-c-brand-2: #b0ccff;
+  --vp-c-brand-3: var(--htmv-primary);
+  --vp-c-brand-soft: rgb(37 99 235 / 20%);
+  --vp-c-bg: var(--htmv-background);
+  --vp-c-bg-alt: #292929;
+  --vp-c-bg-elv: #3b3b3b;
+  --vp-c-bg-soft: #3b3b3b;
+  --vp-c-text-1: #f5f5f5;
+  --vp-c-text-2: #c5c5c5;
+  --vp-c-text-3: #ababab;
+  --vp-c-border: #646464;
+  --vp-c-divider: #505050;
+  --vp-c-gutter: #252525;
+  --vp-c-tip-1: var(--htmv-secondary);
+  --vp-c-tip-2: #66ffc2;
+  --vp-c-tip-soft: rgb(0 255 153 / 8%);
+  --vp-c-warning-1: var(--htmv-tertiary);
+  --vp-c-warning-2: #ffda66;
+  --vp-c-warning-soft: rgb(255 192 0 / 8%);
+  --vp-c-default-soft: rgb(255 255 255 / 7%);
+}
+
+.VPNavBarTitle .title {
+  gap: 4px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.VPHomeHero .image-src {
+  max-width: 240px;
+  max-height: 240px;
+}
+
+.VPFeatures .item:nth-child(3n + 1) .VPFeature {
+  border-top: 3px solid var(--htmv-primary);
+}
+
+.VPFeatures .item:nth-child(3n + 2) .VPFeature {
+  border-top: 3px solid var(--htmv-secondary);
+}
+
+.VPFeatures .item:nth-child(3n) .VPFeature {
+  border-top: 3px solid var(--htmv-tertiary);
+}
+
+::selection {
+  color: #333333;
+  background: #00ff99;
+}

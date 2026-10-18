@@ -1,0 +1,23 @@
+{
+  "name": "@htmv/elements",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./auto": "./dist/auto.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@htmv/core": "0.1.0",
+    "@htmv/compiler": "0.1.0",
+    "@htmv/exporter": "0.1.0",
+    "@htmv/player": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

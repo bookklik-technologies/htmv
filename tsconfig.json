@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/compiler" },
+    { "path": "packages/layout-dom" },
+    { "path": "packages/renderer-canvas" },
+    { "path": "packages/audio" },
+    { "path": "packages/media" },
+    { "path": "packages/media-mediabunny" },
+    { "path": "packages/exporter" },
+    { "path": "packages/player" },
+    { "path": "packages/elements" },
+    { "path": "packages/plugins" }
+    ,{ "path": "packages/htmv" }
+  ]
+}

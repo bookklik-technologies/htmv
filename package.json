@@ -1,0 +1,33 @@
+{
+  "name": "@bookklik/htmv",
+  "version": "0.1.0",
+  "description": "Build video compositions with HTML, preview them in the browser, and export MP4 or WebM",
+  "license": "MIT",
+  "author": {
+    "name": "a-hakim",
+    "url": "https://github.com/bookklik-technologies"
+  },
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b && esbuild packages/htmv/src/index.ts --bundle --format=esm --target=es2022 --outfile=examples/shared/htmv/index.js --sourcemap && esbuild packages/htmv/src/auto.ts --bundle --external:./index.js --format=esm --target=es2022 --outfile=examples/shared/htmv/auto.js --sourcemap",
+    "serve:examples": "node tests/server.mjs",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:browser": "playwright test",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "esbuild": "0.28.2",
+    "typescript": "^5.6.3",
+    "vitepress": "^1.6.4",
+    "vitest": "5.0.5"
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Data templates · HTMV examples</title><link rel="icon" href="../shared/brand/icon.svg"><link rel="stylesheet" href="../shared/studio.css"></head><body>
+  <hv-composition id="metrics" width="1280" height="720" fps="30" duration="150f" background="#333333">
+    <hv-assets><hv-asset id="outfit" kind="font" src="../shared/brand/Outfit.ttf" family="Outfit" weight="700"></hv-asset></hv-assets>
+    <script type="application/json" data-hv-props>{"items":[{"id":"customers","label":"Customers","value":1200},{"id":"projects","label":"Projects","value":84},{"id":"countries","label":"Countries","value":16}]}</script>
+    <script type="application/json" data-hv-schema>{"type":"object","required":["items"],"additionalProperties":false,"properties":{"items":{"type":"array","minItems":3,"maxItems":3,"items":{"type":"object","required":["id","label","value"],"additionalProperties":false,"properties":{"id":{"type":"string","minLength":1},"label":{"type":"string","minLength":1,"maxLength":20},"value":{"type":"integer","minimum":0,"maximum":999999}}}}}}</script>
+    <style>
+      .heading { position:absolute; left:70px; top:100px; width:1140px; height:100px; font-family:Outfit; font-weight:700; font-size:64px; color:#ffffff; }
+      .cards { position:absolute; left:70px; top:280px; width:1140px; height:280px; display:flex; gap:30px; }
+      .card { position:relative; width:360px; height:280px; padding:26px; background-color:#2563eb; border-radius:16px; color:#ffffff; }
+      .label { position:absolute; left:26px; top:28px; width:308px; height:70px; font-family:Outfit; font-weight:700; font-size:29px; line-height:1.2; }
+      .number { position:absolute; left:26px; top:135px; width:308px; height:110px; font-family:Outfit; font-weight:700; font-size:72px; }
+      .footer { position:absolute; left:70px; top:635px; width:1140px; height:40px; font-family:Outfit; font-size:20px; color:#00ff99; }
+    </style>
+    <template id="metric-card" data-hv-component>
+      <div class="card"><h2 class="label" data-hv-text="props.label"></h2><p id="value" class="number">0</p></div>
+      <hv-animation target="#value" property="text-number" duration="75f" from="0" data-hv-attr-to="props.value" easing="ease-out" fill="both"></hv-animation>
+    </template>
+    <hv-scene duration="150f">
+      <h1 class="heading">Your data. In motion.</h1>
+      <div class="cards"><template data-hv-each="props.items" data-hv-as="item" data-hv-key="item.id"><hv-use template="#metric-card" duration="150f" data-hv-attr-props="item"></hv-use></template></div>
+      <p class="footer">ONE COMPONENT / THREE INSTANCES / YOUR NEXT VERSION</p>
+      <hv-animation target=".card" property="translate-y" duration="30f" from="35px" to="0px" easing="ease-out" fill="both"></hv-animation>
+    </hv-scene>
+  </hv-composition>
+  <script type="module" src="./app.js"></script>
+</body></html>

@@ -1,0 +1,37 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../compiler"
+    },
+    {
+      "path": "../renderer-canvas"
+    },
+    {
+      "path": "../audio"
+    },
+    {
+      "path": "../media"
+    },
+    {
+      "path": "../plugins"
+    },
+    {
+      "path": "../media-mediabunny"
+    },
+    {
+      "path": "../layout-dom"
+    }
+  ]
+}

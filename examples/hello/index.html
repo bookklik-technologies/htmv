@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hello · HTMV examples</title><link rel="icon" href="../shared/brand/icon.svg"><link rel="stylesheet" href="../shared/studio.css"></head><body>
+  <!-- A complete five-second composition. Host-page UI never appears in the export. -->
+  <hv-composition id="hello" width="1280" height="720" fps="30" duration="150f" background="#102030">
+    <hv-assets><hv-asset id="outfit" kind="font" src="../shared/brand/Outfit.ttf" family="Outfit" weight="700"></hv-asset></hv-assets>
+    <style>
+      .title { position:absolute; left:90px; top:255px; width:1100px; height:210px; font-family:Outfit; font-weight:700; font-size:80px; line-height:1.12; color:#ffffff; }
+      .label { position:absolute; left:96px; top:160px; width:1000px; height:40px; font-family:Outfit; font-weight:700; font-size:20px; color:#00ff99; }
+      .line { position:absolute; left:96px; top:530px; width:170px; height:8px; background-color:#2563eb; }
+    </style>
+    <hv-scene duration="150f">
+      <p class="label">HTML IN. VIDEO OUT.</p><h1 id="headline" class="title">Made with HTML</h1><div class="line"></div>
+      <hv-animation target="#headline" property="opacity" duration="24f" from="0" to="1" easing="ease-out" fill="both"></hv-animation>
+      <hv-animation target="#headline" property="translate-y" duration="30f" from="30px" to="0px" easing="ease-out" fill="both"></hv-animation>
+    </hv-scene>
+  </hv-composition>
+  <script type="module" src="./app.js"></script>
+</body></html>
