@@ -67,6 +67,7 @@ export default defineConfig({
           items: [
             { text: 'Elements & attributes', link: '/reference/elements' },
             { text: 'JavaScript API', link: '/reference/javascript-api' },
+            { text: 'npm distribution', link: '/reference/npm-package' },
             { text: 'Player & events', link: '/reference/player' },
             { text: 'Plugins', link: '/reference/plugins' },
             { text: 'Diagnostics & limits', link: '/reference/diagnostics' },

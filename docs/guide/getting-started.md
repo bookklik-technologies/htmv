@@ -55,13 +55,25 @@ This example uses `sans-serif`, so its appearance depends on the system font. Re
 
 ### npm
 
-In an application with a bundler, import the public API from `@htmv/htmv`:
+In an application with a bundler, install the public package:
+
+```sh
+npm install @bookklik/htmv
+```
+
+Then import its public API:
 
 ```js
-import { compile, createRenderer, registerElements } from '@htmv/htmv';
+import { compile, createRenderer, registerElements } from '@bookklik/htmv';
 ```
 
 Call `registerElements()` if the page uses the custom elements. For programmatic rendering, pass the source to `compile()` and create a renderer from the result. See the [JavaScript API reference](/reference/javascript-api.md#usage) for an export example.
+
+Alternatively, `import '@bookklik/htmv/auto'` registers the custom elements on import.
+The root import does not register them. The npm package includes compiled JavaScript,
+TypeScript declarations, and runtime dependencies, so no engine checkout or internal
+workspace packages are required. Canvas playback and media inspection are available
+as `PlayerEngine` and `getMediabunnyAdapter` from the same root import.
 
 ## Timed ordinary elements
 

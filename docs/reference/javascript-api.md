@@ -1,16 +1,25 @@
 # JavaScript API
 
-Import the public API from `@htmv/htmv`. Compile a source document, create a renderer, then use that renderer to preview frames or export files. Dispose both objects when the application is finished with them.
+Import the public API from `@bookklik/htmv`. Compile a source document, create a renderer, then use that renderer to preview frames or export files. Dispose both objects when the application is finished with them.
 
 ## Entry points
 
 ```js
 import { compile, createRenderer, registerElements,
-         Rational, DiagnosticCodes, parseEasing } from '@htmv/htmv';
-import '@htmv/htmv/auto'; // browser auto-registration (side-effectful)
+         Rational, DiagnosticCodes, parseEasing,
+         PlayerEngine, getMediabunnyAdapter } from '@bookklik/htmv';
+import '@bookklik/htmv/auto'; // browser auto-registration (side-effectful)
 ```
 
 `compile`, `createRenderer`, and `registerElements` are the main entry points. The package also re-exports `Rational`, `DiagnosticCodes`, and `parseEasing` from `@htmv/core`. Importing `auto` registers the custom elements; omit it when registering them explicitly.
+
+`PlayerEngine` provides canvas playback for an existing compiled composition and
+renderer. `getMediabunnyAdapter()` provides the pinned media inspection/decoding
+adapter and muxer factory. Their `PlayerOptions`, `PlayerEventName`, and
+`MediabunnyAdapterPublic` types are exported from the package root as well. All
+entrypoints use the same internal engine classes and declarations.
+`FrameGeometryNode` and `MediaInspection` name the inspection results for hosts
+that expose their own typed wrappers or emit declarations.
 
 ### Easing evaluation
 
@@ -240,7 +249,7 @@ type ExportResult =
 This example compiles a composition, checks export support, reports progress, and releases the session. Connect a cancel control to `controller.abort()` to stop the export:
 
 ```js
-import { compile, createRenderer } from '@htmv/htmv';
+import { compile, createRenderer } from '@bookklik/htmv';
 
 const compiled = await compile(document.querySelector('#hello'), {
   props: { title: 'A personalized film' },

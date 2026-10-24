@@ -1,6 +1,6 @@
 {
   "name": "@bookklik/htmv",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Build video compositions with HTML, preview them in the browser, and export MP4 or WebM",
   "license": "MIT",
   "author": {
@@ -8,11 +8,31 @@
     "url": "https://github.com/bookklik-technologies"
   },
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./auto": {
+      "types": "./dist/auto.d.ts",
+      "import": "./dist/auto.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "./dist/auto.js"
+  ],
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b && esbuild packages/htmv/src/index.ts --bundle --format=esm --target=es2022 --outfile=examples/shared/htmv/index.js --sourcemap && esbuild packages/htmv/src/auto.ts --bundle --external:./index.js --format=esm --target=es2022 --outfile=examples/shared/htmv/auto.js --sourcemap",
+    "build": "npm run build:package && esbuild packages/htmv/src/index.ts --bundle --format=esm --target=es2022 --outfile=examples/shared/htmv/index.js --sourcemap && esbuild packages/htmv/src/auto.ts --bundle --external:./index.js --format=esm --target=es2022 --outfile=examples/shared/htmv/auto.js --sourcemap",
+    "build:package": "tsc -b && node scripts/build-package.mjs",
+    "prepack": "npm run build:package",
     "serve:examples": "node tests/server.mjs",
     "typecheck": "tsc -b",
     "test": "vitest run",
@@ -22,9 +42,21 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"
   },
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "color-name": "2.0.0",
+    "css-select": "5.2.2",
+    "css-tree": "3.2.1",
+    "domhandler": "5.0.3",
+    "linebreak": "1.1.0",
+    "mediabunny": "1.61.6",
+    "parse5": "7.3.0"
+  },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "esbuild": "0.28.2",
+    "rollup": "4.65.0",
+    "rollup-plugin-dts": "6.5.1",
     "typescript": "^5.6.3",
     "vitepress": "^1.6.4",
     "vitest": "5.0.5"

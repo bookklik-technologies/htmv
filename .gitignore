@@ -3,6 +3,9 @@ node_modules/
 .npm-cache/
 
 # Build outputs
+/dist/
+/releases/
+/*.tgz
 packages/*/dist/
 examples/shared/htmv/*.js
 examples/shared/htmv/*.js.map

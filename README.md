@@ -33,6 +33,24 @@ export, and plugins. See the [film source and chapter guide](examples/product-in
 
 ## Quick start
 
+For a browser application with a bundler, install the published package:
+
+```sh
+npm install @bookklik/htmv
+```
+
+```js
+import { compile, createRenderer, PlayerEngine, getMediabunnyAdapter } from '@bookklik/htmv';
+// Optional: register hv-* elements automatically in the browser.
+import '@bookklik/htmv/auto';
+```
+
+The root import does not register custom elements. Call `registerElements()` explicitly
+or import `/auto` when using them. Version `0.1.2` includes compiled ESM, TypeScript
+declarations, and runtime dependencies; no sibling checkout or internal `@htmv/*`
+packages are needed. The npm package contains the runtime, while the repository
+contains the examples and documentation.
+
 From the repository root, install dependencies, build the browser bundles, and
 start the example server:
 
@@ -68,7 +86,7 @@ directory and adjust the script URL. This composition runs for five seconds:
 <hv-player for="hello" controls></hv-player>
 ```
 
-For programmatic use, import `compile` and `createRenderer` from `@htmv/htmv`.
+For programmatic use, import `compile` and `createRenderer` from `@bookklik/htmv`.
 See the [API usage example](docs/reference/javascript-api.md#usage) for compilation,
 capability preflight, export, and resource cleanup.
 
@@ -101,6 +119,9 @@ the clips, synthesized audio, posters, and introduction film.
 
 ## Packages
 
+`@bookklik/htmv` is the installable public package. The following internal workspace
+packages are bundled into it and do not need separate installation:
+
 | Package | Responsibility |
 | --- | --- |
 | `@htmv/htmv` | Public API: `compile()`, `createRenderer()`, and `registerElements()`. |
@@ -121,6 +142,7 @@ the clips, synthesized audio, posters, and introduction film.
 ```sh
 npm run typecheck     # TypeScript across all packages
 npm run build         # Packages and browser ESM bundles
+npm run build:package # npm runtime and self-contained declarations only
 npm run docs:dev      # Local documentation server
 npm run docs:build    # Static documentation site
 ```
@@ -131,6 +153,11 @@ Test commands, subject to any permission requirements in `AGENTS.md`:
 npm test              # Unit tests
 npm run test:browser  # Playwright conformance and parity regressions
 ```
+
+`npm pack` runs the package build through `prepack` and creates
+`bookklik-htmv-0.1.2.tgz`. See the [npm release guide](https://bookklik-technologies.github.io/htmv/reference/npm-package.html)
+for isolated consumer verification and publication instructions. Packaging does not
+run unit tests or publish a release.
 
 ## Limits
 
