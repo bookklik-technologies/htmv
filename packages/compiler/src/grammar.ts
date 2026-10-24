@@ -46,7 +46,7 @@ export const HV_ELEMENTS: Record<string, ElementSchema> = {
     kind: 'media',
     timing: true,
     required: ['src'],
-    optional: ['trim-in', 'trim-out', 'rate', 'audio', 'gain', 'fit', 'position', 'end-behavior', 'track', 'audio-track', 'class', 'id'],
+    optional: ['trim-in', 'trim-out', 'rate', 'audio', 'gain', 'fade-in', 'fade-out', 'fade-offset', 'fade-duration', 'fit', 'position', 'end-behavior', 'track', 'audio-track', 'class', 'id'],
     childContract: 'none'
   },
   'hv-audio': {
@@ -54,7 +54,7 @@ export const HV_ELEMENTS: Record<string, ElementSchema> = {
     kind: 'media',
     timing: true,
     required: ['src'],
-    optional: ['trim-in', 'trim-out', 'rate', 'gain', 'repeat', 'fade-in', 'fade-out', 'track', 'class', 'id'],
+    optional: ['trim-in', 'trim-out', 'rate', 'gain', 'repeat', 'fade-in', 'fade-out', 'fade-offset', 'fade-duration', 'track', 'class', 'id'],
     childContract: 'none'
   },
   'hv-animation': {
@@ -62,7 +62,7 @@ export const HV_ELEMENTS: Record<string, ElementSchema> = {
     kind: 'declaration',
     timing: true,
     required: ['target', 'property', 'duration'],
-    optional: ['start', 'from', 'to', 'easing', 'fill', 'mode'],
+    optional: ['start', 'from', 'to', 'easing', 'fill', 'mode', 'sample-start', 'sample-end'],
     childContract: 'animation-keyframes'
   },
   'hv-keyframe': {

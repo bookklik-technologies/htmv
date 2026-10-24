@@ -115,12 +115,17 @@ export function buildLayoutDom(session: LayoutSession, timing: TimingResult, opt
     const cs = doc.defaultView!.getComputedStyle(el); if (cs.display === 'none') return;
     if (cs.display === 'contents') { for (const cid of node.childIds) { const child = timing.nodes.get(cid); if (child) capture(child, parent); } return; }
     const rect = el.getBoundingClientRect(); const computed = collectComputedStyle(el);
-    const radius = (value: string): number => value.endsWith('%') ? Math.min(rect.width, rect.height) * Number.parseFloat(value) / 100 : Number.parseFloat(value) || 0;
+    const radius = (value: string, vertical: boolean): number => { const parts = value.trim().split(/\s+/), part = vertical ? parts[1] ?? parts[0] : parts[0]; return Math.max(0, part.endsWith('%') ? (vertical ? rect.height : rect.width) * Number.parseFloat(part) / 100 : Number.parseFloat(part) || 0); };
+    const corners = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius];
+    const rx = corners.map(v => radius(v, false)) as [number, number, number, number], ry = corners.map(v => radius(v, true)) as [number, number, number, number];
+    // CSS proportionally reduces intersecting radii. Empty pairs impose no restriction.
+    const factor = Math.min(1, ...[rx[0] + rx[1], rx[2] + rx[3]].map(sum => sum ? rect.width / sum : 1), ...[ry[0] + ry[3], ry[1] + ry[2]].map(sum => sum ? rect.height / sum : 1));
+    for (let i = 0; i < 4; i++) { rx[i] *= factor; ry[i] *= factor; }
     const box: LayoutBox = {
       id: node.id, tag: node.tag, kind: node.kind === 'composition' ? 'box' : node.kind as LayoutBox['kind'],
       x: rect.left, y: rect.top, width: rect.width, height: rect.height, children: [], computed, display: true,
       visibility: cs.visibility === 'hidden' ? 'hidden' : 'visible', overflowHidden: cs.overflow === 'hidden',
-      borderRadiusPx: [radius(cs.borderTopLeftRadius), radius(cs.borderTopRightRadius), radius(cs.borderBottomRightRadius), radius(cs.borderBottomLeftRadius)],
+      borderRadiusPx: rx, borderRadiusYpx: ry,
       transform: matrices.get(node.id), transformOrigin: origins.get(node.id)
     };
     const text = textLines.get(node.id);

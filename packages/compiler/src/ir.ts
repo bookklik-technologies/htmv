@@ -68,7 +68,8 @@ export function lowerToIR(
       easing: a.easing,
       fill: a.fill,
       mode: a.mode,
-      keyframes: a.keyframes
+      keyframes: a.keyframes,
+      sampleStart: a.sampleStart?.toJSON(), sampleEnd: a.sampleEnd?.toJSON()
     })),
     assets,
     props,

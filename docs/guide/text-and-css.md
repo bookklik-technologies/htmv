@@ -42,7 +42,7 @@ The following properties are supported after shorthand expansion. CSS variables 
 | Grid | `grid-template-columns/rows`, `grid-auto-columns/rows/flow`, `grid-column/row`, `gap`, align/justify items/self/content; no subgrid/masonry |
 | Geometry | px, %, em, rem, resolvable calc(); `vw/vh` use the composition dimensions |
 | Background | color; one background-image layer: validated raster URL or linear-gradient with sRGB stops; `background-size/position`; `no-repeat` |
-| Border | solid/none, per-edge width/color, `border-radius` px/%; no border-image |
+| Border | solid/none, per-edge width/color, circular or elliptical `border-radius` px/%; no border-image |
 | Clip | `overflow: visible/hidden` and rounded border clips; no `clip-path` |
 | Transform | finite 2D translate/rotate/scale/skew/matrix; `transform-origin` px/%; [animation restrictions](./animation.md#property-registry) apply |
 | Alpha | `opacity` 0–1 applied to isolated groups |
@@ -63,6 +63,12 @@ For debugging, set `stylePolicy: 'ignore-unsupported'` to omit unsupported decla
 - DOM writes and layout reads are batched. Fractional coordinates are retained.
 - One composition pixel maps to one export pixel. Player scaling and `devicePixelRatio` do not change export dimensions.
 - Scenes and opacity groups use bounded, reusable surfaces. Overflow does not expand them to the size of an arbitrary page.
+
+### Rounded corners
+
+Corner radii retain separate horizontal and vertical values. For example, `border-radius: 24px / 12px` creates elliptical corners. Percentage radii resolve against the border-box width horizontally and height vertically, so `border-radius: 50%` on a rectangular box creates an ellipse.
+
+When adjacent corner radii exceed an edge length, all horizontal and vertical radii are reduced by one common factor to fit the box, following CSS overlap reduction. Background fills and `overflow: hidden` clips use the resolved corner shape. Solid borders with equal widths on all four edges follow the rounded outline; unequal edge widths use rectangular edge painting.
 
 ## Text layout {#text-is-a-subsystem}
 

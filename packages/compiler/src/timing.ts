@@ -34,6 +34,8 @@ export interface MediaTiming {
   repeat?: boolean;
   fadeIn?: Rational;
   fadeOut?: Rational;
+  fadeOffset?: Rational;
+  fadeDuration?: Rational;
 }
 
 export interface ResolvedNode {
@@ -81,6 +83,9 @@ export interface ResolvedAnimation {
   keyframes?: { offset: number; value: string; easing?: string }[];
   clockScopeId: string; // nearest structural clock ancestor
   instanceKey?: string;
+  /** Optional inclusive scope-clock sampling bounds, used for held still-layer handles. */
+  sampleStart?: Rational;
+  sampleEnd?: Rational;
 }
 
 export interface MediaExtentResolver {
@@ -457,8 +462,11 @@ export class TimingResolver {
           audioTrack: node.attributes['audio-track'] !== undefined ? Number(node.attributes['audio-track']) : undefined,
           repeat: node.tag === 'hv-audio' ? node.attributes['repeat'] === 'true' : undefined,
           fadeIn: node.attributes['fade-in'] !== undefined ? (this.parseTime(node.attributes['fade-in'], node, 'fade-in') ?? Rational.zero()) : Rational.zero(),
-          fadeOut: node.attributes['fade-out'] !== undefined ? (this.parseTime(node.attributes['fade-out'], node, 'fade-out') ?? Rational.zero()) : Rational.zero()
+          fadeOut: node.attributes['fade-out'] !== undefined ? (this.parseTime(node.attributes['fade-out'], node, 'fade-out') ?? Rational.zero()) : Rational.zero(),
+          fadeOffset: node.attributes['fade-offset'] !== undefined ? this.parseTime(node.attributes['fade-offset'], node, 'fade-offset') : undefined,
+          fadeDuration: node.attributes['fade-duration'] !== undefined ? this.parseTime(node.attributes['fade-duration'], node, 'fade-duration') : undefined
         };
+        if (media.fadeDuration?.lte(Rational.zero()) || media.fadeIn?.lt(Rational.zero()) || media.fadeOut?.lt(Rational.zero())) this.diag(error('E_TIME_UNIT', 'Fade duration must be positive and fade lengths nonnegative.', { nodeId: id }));
         if (node.attributes['repeat'] !== undefined && !['true', 'false'].includes(node.attributes['repeat'])) {
           this.diag(error('E_ENUM', `repeat accepts only the exact strings true and false; received "${node.attributes['repeat']}".`, { attribute: 'repeat', nodeId: id }));
         }
@@ -594,6 +602,11 @@ export class TimingResolver {
     const duration = this.parseTime(node.attributes['duration'], node, 'duration');
     const start = this.parseTime(node.attributes['start'] ?? '0', node) ?? Rational.zero();
     const fill = (node.attributes['fill'] as ResolvedAnimation['fill']) ?? 'none';
+    const sampleStart = node.attributes['sample-start'] === undefined ? undefined : this.parseTime(node.attributes['sample-start'], node, 'sample-start');
+    const sampleEnd = node.attributes['sample-end'] === undefined ? undefined : this.parseTime(node.attributes['sample-end'], node, 'sample-end');
+    if (sampleStart?.lt(Rational.zero()) || sampleEnd?.lt(Rational.zero()) || sampleStart && sampleEnd && sampleEnd.lt(sampleStart)) {
+      this.diag(error('E_ANIMATION', 'Animation sampling bounds must be nonnegative and ordered.', { nodeId: id })); return;
+    }
     if (duration === undefined || duration.lte(Rational.zero())) {
       this.diag(error('E_DURATION', 'Animation requires an explicit positive duration.', { attribute: 'duration', nodeId: id }));
       return;
@@ -654,6 +667,7 @@ export class TimingResolver {
       keyframes: keyframes.length > 0 ? keyframes : undefined,
       clockScopeId: scopeId
       ,instanceKey: node.attributes['hv-instance-key']
+      ,sampleStart, sampleEnd
     };
     this.animations.push(anim);
   }
@@ -695,7 +709,7 @@ export class TimingResolver {
         const gain = Number(node.media.gain ?? '1');
         if (!Number.isFinite(gain) || gain < 0 || gain > 4) this.diag(error('E_ANIMATION', 'Media gain must be finite and within 0–4.', { nodeId: node.id }));
         for (const value of [node.media.track, node.media.audioTrack]) if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) this.diag(error('E_CODEC_DECODE', 'Track indices must be nonnegative safe integers.', { nodeId: node.id }));
-        if (typeof node.duration === 'object') for (const fade of [node.media.fadeIn, node.media.fadeOut]) if (fade && (fade.lt(Rational.zero()) || fade.gt(node.duration))) this.diag(error('E_DURATION', 'Audio fades must lie within the node duration.', { nodeId: node.id }));
+        if (typeof node.duration === 'object') for (const fade of [node.media.fadeIn, node.media.fadeOut]) if (fade && (fade.lt(Rational.zero()) || fade.gt(node.media.fadeDuration ?? node.duration))) this.diag(error('E_DURATION', 'Audio fades must lie within their envelope duration.', { nodeId: node.id }));
       }
       for (const [attr, value] of Object.entries(node.attributes)) {
         const allowed = ENUMERATED_BOOLEAN[attr];

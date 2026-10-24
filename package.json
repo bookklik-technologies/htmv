@@ -1,6 +1,6 @@
 {
   "name": "@bookklik/htmv",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Build video compositions with HTML, preview them in the browser, and export MP4 or WebM",
   "license": "MIT",
   "author": {

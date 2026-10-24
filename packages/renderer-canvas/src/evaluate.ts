@@ -275,7 +275,10 @@ export function evaluateFrame(
     const b = anim.start;
     const d = anim.duration;
     const scope = states.get(anim.clockScopeId)!;
-    const p0 = (scope.parentOverride ?? scope.nodeLocal).sub(b).div(d);
+    let sampleTime = scope.parentOverride ?? scope.nodeLocal;
+    if (anim.sampleStart && sampleTime.lt(anim.sampleStart)) sampleTime = anim.sampleStart;
+    if (anim.sampleEnd && sampleTime.gt(anim.sampleEnd)) sampleTime = anim.sampleEnd;
+    const p0 = sampleTime.sub(b).div(d);
     let p: number | null = null;
     if (p0.lt(Rational.zero())) {
       if (anim.fill === 'backwards' || anim.fill === 'both') p = 0;

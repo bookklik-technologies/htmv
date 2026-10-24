@@ -46,6 +46,8 @@ export interface LayoutBox {
   lines?: TextLine[]; // text layout result
   overflowHidden: boolean;
   borderRadiusPx: [number, number, number, number];
+  /** Vertical corner radii; older snapshots may omit these for circular corners. */
+  borderRadiusYpx?: [number, number, number, number];
   transform?: { fn: string; args: number[] }[];
   transformOrigin?: [number, number];
 }

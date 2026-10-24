@@ -46,9 +46,19 @@ Player events are `CustomEvent`s with a `detail` payload:
 |---|---|
 | `hv-ready` | Compiled renderer ready |
 | `hv-frame` | `{ frame, time }` — frame index and exact rational time |
+| `hv-level` | `{ peak, clippedSamples }` — audio mix measurements for one preview block |
 | `hv-play` / `hv-pause` / `hv-ended` | Playback state transitions |
 | `hv-diagnostic` | A runtime `Diagnostic` |
 | `hv-error` | A fatal player error |
+
+`hv-level` fires as preview audio blocks are mixed for scheduling, so events can arrive ahead of audible playback. `peak` is the largest absolute mixed amplitude before clamping and can exceed `1`. `clippedSamples` counts channel samples outside `[−1,1]` in that block; stereo channels count separately. These are per-block measurements, not cumulative totals or frame-synchronized speaker levels. Silent compositions without scheduled audio do not produce these events.
+
+```js
+document.querySelector('hv-player').addEventListener('hv-level', ({ detail }) => {
+  const { peak, clippedSamples } = detail;
+  console.log('Preview peak:', peak, 'Clipped channel samples:', clippedSamples);
+});
+```
 
 Export progress is delivered through the export callback rather than player events. It includes the phase, completed and total frames, mixed and total samples, bytes written, and an estimated time remaining when available. Progress reaches 100% after the container and writer are finalized.
 

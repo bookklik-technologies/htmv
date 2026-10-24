@@ -7,7 +7,7 @@ export { compileBrowser as compile } from '@htmv/exporter';
 export type { CompileOptions, ResourcePolicy, AssetLoadContext } from '@htmv/compiler';
 export { RendererSession as createRendererImpl, registerElements } from './public.js';
 export type { RendererSession } from '@htmv/exporter';
-export { Rational, DiagnosticCodes } from '@htmv/core';
+export { Rational, DiagnosticCodes, parseEasing } from '@htmv/core';
 export type { Diagnostic, CompositionIR, FrameRange, JsonObject } from '@htmv/core';
 
 /** createRenderer acquires session state against a compiled composition (spec 13.1). */

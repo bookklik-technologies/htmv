@@ -45,6 +45,22 @@ Audio in the outgoing and incoming items uses equal-power gains: `gOut = cos(p·
 - The outgoing scene's clock continues through the overlap. The incoming scene starts at local time zero when the overlap begins and continues from there when the transition ends.
 - `direction` is `left | right | up | down` and applies to slide/wipe.
 
+For a left slide, the outgoing item moves left and the incoming item enters from the right:
+
+```html
+<hv-series>
+  <hv-scene duration="90f" style="background-color:#102030">
+    <h1>First scene</h1>
+  </hv-scene>
+  <hv-transition type="slide" direction="left" duration="15f"></hv-transition>
+  <hv-scene duration="90f" style="background-color:#305070">
+    <h1>Second scene</h1>
+  </hv-scene>
+</hv-series>
+```
+
+At progress `p`, their horizontal offsets are `−p × width` and `(1−p) × width`. Halfway through the overlap, the outgoing scene is half a viewport to the left and the incoming scene is half a viewport to the right. During an overlap, the painter handles both items together once; it does not also paint the outgoing item as an ordinary sibling.
+
 ## Loops
 
 `hv-loop` requires `iteration-duration` and `count` (a positive integer ≥ 1); its total length is the product and is always finite.

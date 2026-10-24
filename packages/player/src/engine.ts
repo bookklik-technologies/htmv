@@ -8,7 +8,7 @@ import type { CompiledCompositionImpl } from '@htmv/compiler';
 import type { RendererSession, FrameResult, FrameRange } from '@htmv/exporter';
 import { Diagnostic } from '@htmv/core';
 
-export type PlayerEventName = 'hv-ready' | 'hv-frame' | 'hv-play' | 'hv-pause' | 'hv-ended' | 'hv-diagnostic' | 'hv-error';
+export type PlayerEventName = 'hv-ready' | 'hv-frame' | 'hv-play' | 'hv-pause' | 'hv-ended' | 'hv-diagnostic' | 'hv-error' | 'hv-level';
 
 export interface PlayerOptions {
   target: HTMLCanvasElement;
@@ -221,6 +221,7 @@ export class PlayerEngine {
           while (index < total && (this.audioEpoch === null || this.audioEpoch + index / sampleRate < ctx.currentTime + 0.25)) {
             const count = Math.min(4096, total - index);
             const block = await this.renderer.mixAudioBlockForExport(rootStart.add(Rational.of(BigInt(index), BigInt(sampleRate))), count, index, this.compiled.metadata, []);
+            this.onEvent('hv-level', { peak: block.peak, clippedSamples: block.clippedSamples });
             if (!this.playing || generation !== this.audioGeneration) return;
             if (this.audioEpoch === null) { this.audioEpoch = ctx.currentTime + 0.03; this.startedAt = performance.now(); }
             if (this.audioEpoch + index / sampleRate < ctx.currentTime) {

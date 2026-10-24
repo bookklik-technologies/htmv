@@ -58,7 +58,7 @@ export async function mixAudioBlockCanonical(compiled: CompiledCompositionImpl, 
       if (media.repeat && media.trimOut) source = media.trimIn.add(local.mul(media.rate).positiveMod(media.trimOut.sub(media.trimIn)));
       if (!media.repeat && media.trimOut && source.gte(media.trimOut)) continue;
       const position = source.mul(rate); const center = position.floor().toSafeInteger();
-      const gain = gainAtClocks(compiled, node, clocks) * fadeEnvelope(local.toNumber(), media.fadeIn?.toNumber() ?? 0, media.fadeOut?.toNumber() ?? 0, (node.duration as Rational).toNumber()) * transitionAtClocks(compiled, node, clocks);
+      const gain = gainAtClocks(compiled, node, clocks) * fadeEnvelope(local.toNumber() + (media.fadeOffset?.toNumber() ?? 0), media.fadeIn?.toNumber() ?? 0, media.fadeOut?.toNumber() ?? 0, (media.fadeDuration ?? node.duration as Rational).toNumber()) * transitionAtClocks(compiled, node, clocks);
       positions.set(j, { position, gain });
       for (let k = center - RESAMPLER_TAPS; k <= center + RESAMPLER_TAPS; k++) {
         const index = wrapped(k); if (index >= first && index < last && index >= 0) neededPages.add(Math.floor(index / PCM_PAGE));
@@ -111,7 +111,9 @@ export async function mixAudioBlockCanonical(compiled: CompiledCompositionImpl, 
 function gainAtClocks(compiled: CompiledCompositionImpl, node: ResolvedNode, clocks: Map<string, Rational>): number {
   for (const anim of compiled.timing.animations) {
     if (anim.targetSelector !== `#${node.id}` || anim.property !== 'gain') continue;
-    const time = clocks.get(`${anim.clockScopeId}:children`) ?? clocks.get(anim.clockScopeId); if (!time) continue;
+    let time = clocks.get(`${anim.clockScopeId}:children`) ?? clocks.get(anim.clockScopeId); if (!time) continue;
+    if (anim.sampleStart && time.lt(anim.sampleStart)) time = anim.sampleStart;
+    if (anim.sampleEnd && time.gt(anim.sampleEnd)) time = anim.sampleEnd;
     const progress = time.sub(anim.start).div(anim.duration);
     if (progress.lt(Rational.zero()) && !['backwards', 'both'].includes(anim.fill)) continue;
     if (progress.gte(Rational.of(1n)) && !['forwards', 'both'].includes(anim.fill)) continue;

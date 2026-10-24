@@ -70,6 +70,8 @@ export interface AnimationIR {
   mode: 'replace';
   clockScopeId?: string;
   keyframes?: { offset: number; value: string; easing?: string }[];
+  sampleStart?: { numerator: string; denominator: string };
+  sampleEnd?: { numerator: string; denominator: string };
 }
 
 export interface AssetDescriptor {

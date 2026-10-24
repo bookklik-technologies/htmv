@@ -33,11 +33,32 @@ The resampler maps each output position to exact source time and uses a version-
 |---|---|
 | Base gain | `0–4` on `hv-video`/`hv-audio` |
 | `audio="mute"` | Gain zero, visual playback unchanged |
-| `fade-in` / `fade-out` | Linear amplitude ramps in the node's output-local time; lengths cannot exceed node duration; overlapping fades multiply |
+| `fade-in` / `fade-out` | Linear amplitude ramps on `hv-video`/`hv-audio`; default `0`; nonnegative lengths, each at most the envelope duration; overlapping fades multiply |
+| `fade-offset` | Time added to the media node's local output time when sampling its fade envelope; default `0` |
+| `fade-duration` | Positive total envelope duration; defaults to the node duration |
 | Transition gains | Equal-power `cos/sin(p·π/2)` on series transitions |
 | Gain animation | Evaluated per audio sample with the same easing evaluator as visuals |
 
 Final gain is `clip × transition × master`. When a gain animation contributes, its value replaces the clip's base gain for that interval.
+
+### Preserving fades across split clips
+
+Fade controls apply to an included video audio track as well as `hv-audio`. They affect sound only. Each sample evaluates the envelope at `localTime + fadeOffset`, with total length `fadeDuration` (or the node duration when omitted). These controls use the [time value grammar](/reference/elements.md#time-value-grammar). Negative fade lengths or a nonpositive explicit envelope duration report `E_TIME_UNIT`; lengths exceeding the envelope duration report `E_DURATION`.
+
+Use an offset and shared duration to preserve a longer fade envelope across separately trimmed clips. For a source with at least ten seconds of audio, place these adjacent nodes in the same timeline:
+
+```html
+<hv-audio src="music.wav" start="0" duration="4s"
+          trim-in="0" trim-out="4s"
+          fade-in="2s" fade-out="2s"
+          fade-offset="0" fade-duration="10s"></hv-audio>
+<hv-audio src="music.wav" start="4s" duration="6s"
+          trim-in="4s" trim-out="10s"
+          fade-in="2s" fade-out="2s"
+          fade-offset="4s" fade-duration="10s"></hv-audio>
+```
+
+The first node samples envelope time `[0,4s)` and the second `[4s,10s)`, so the split does not restart the fade-in or end the fade-out early. Source trims determine which audio is sampled; fade offsets determine its envelope position. They do not change node activity or source playback time. Ordinary range exports already preserve the original envelope position and need no added offset.
 
 ## Exact repetition
 
@@ -48,11 +69,11 @@ sourceTime = a + positiveModulo(l × r, S)
 ```
 
 - Repetition is independent of `hv-loop` and does not change the node duration.
-- Fade envelopes span the node's full local duration; repeating the source does not restart them.
+- Fade envelopes default to the node's full local duration; `fade-offset` and `fade-duration` can select part of a longer envelope. Repeating the source does not restart the envelope.
 - Resampler taps wrap across the trim seam without an added crossfade, gap, or encoder restart. Gain envelopes inside structural loops repeat with the loop; media rate does not speed them up.
 - A seam may click when the waveform endpoints differ. Use a seamless source or crossfade separate nodes to avoid this.
 
-To calculate gain for a sample, the engine maps root time through the structural clocks. Gain animation uses its enclosing timeline's clock; clip fades use the media node's local output time. Playback rate affects source sampling, not these envelope clocks.
+To calculate gain for a sample, the engine maps root time through the structural clocks. Gain animation uses its enclosing timeline's clock, clamped by any [animation sampling bounds](./animation.md#sampling-bounds); clip fades use the media node's local output time plus `fade-offset`. Playback rate affects source sampling, not these envelope clocks.
 
 ## Codec delay, priming, padding
 

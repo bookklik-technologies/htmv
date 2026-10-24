@@ -9,7 +9,7 @@ import { checkImageDimensions, resolveCssAssetUrls } from '@htmv/compiler';
 import type { ResourcePolicy } from '@htmv/compiler';
 import { LayoutSession, buildLayoutDom, LayoutBox } from '@htmv/layout-dom';
 import { evaluateFrame, Evaluation, MediaRequest } from '@htmv/renderer-canvas';
-import { paintFrame, indexBoxes } from './paint.js';
+import { paintFrame, indexBoxes, inspectPaintFrame } from './paint.js';
 import { canonicalEasing } from './evaluator.js';
 import type { MediaReader, MediaReaderOpenOptions, MediaInspection, DecodedVideoFrame } from '@htmv/media';
 import { getMediabunnyAdapter, MediabunnyMuxer, MuxerPlan } from '@htmv/media-mediabunny';
@@ -68,6 +68,7 @@ export class RendererSession {
   private pendingHandles = new Map<string, Promise<MediaHandle | null>>();
   private fonts: FontFace[] = [];
   private canvas: HTMLCanvasElement | null = null;
+  private inspectionContext: CanvasRenderingContext2D | null = null;
   private errorState: Diagnostic | null = null;
   private imageURLs = new Map<string, string>();
   private imageSizes = new Map<string, { width: number; height: number }>();
@@ -293,6 +294,7 @@ export class RendererSession {
     await this.frameQueue;
     try { await this.exportTask; } catch { /* disposal cancels an owned export */ }
     this.layout.dispose();
+    this.inspectionContext = null;
     for (const bitmap of new Set(this.imageCache.values())) {
       if ('close' in bitmap) (bitmap as ImageBitmap).close();
       else bitmap.src = '';
@@ -335,6 +337,16 @@ export class RendererSession {
       durationFrames: this.compiled.metadata.durationFrames,
       easing: (name, p, d) => canonicalEasing.evaluate(name, p, d)
     });
+  }
+
+  /** Read-only geometry, values, and activity for the canonical evaluated frame. */
+  inspectFrame(frame: number) {
+    this.assertReady();
+    const evaluation = this.evaluate(frame);
+    if (!this.inspectionContext) { const surface = document.createElement('canvas'); surface.width = surface.height = 1; this.inspectionContext = surface.getContext('2d')!; }
+    const nodes = inspectPaintFrame(this.inspectionContext, this.boxIndex, evaluation, this.metadata.width, this.metadata.height);
+    for (const [id, state] of evaluation.states) if (state.node.kind === 'audio' && !nodes.some(n => n.id === id)) nodes.push({ id, x: 0, y: 0, width: 0, height: 0, rotation: 0, scaleX: 1, scaleY: 1, opacity: 0, corners: [], values: Object.fromEntries((evaluation.animatedValues.get(id) ?? []).map(v => [v.property, v.value])) });
+    return { frame, revisionHash: this.revisionHash, nodes, transitions: evaluation.transitions.map(t => ({ ...t })) };
   }
 
   ensureCanvas(): HTMLCanvasElement {

@@ -6,11 +6,32 @@ Import the public API from `@htmv/htmv`. Compile a source document, create a ren
 
 ```js
 import { compile, createRenderer, registerElements,
-         Rational, DiagnosticCodes } from '@htmv/htmv';
+         Rational, DiagnosticCodes, parseEasing } from '@htmv/htmv';
 import '@htmv/htmv/auto'; // browser auto-registration (side-effectful)
 ```
 
-`compile`, `createRenderer`, and `registerElements` are the main entry points. The package also re-exports `Rational` and `DiagnosticCodes` from `@htmv/core`. Importing `auto` registers the custom elements; omit it when registering them explicitly.
+`compile`, `createRenderer`, and `registerElements` are the main entry points. The package also re-exports `Rational`, `DiagnosticCodes`, and `parseEasing` from `@htmv/core`. Importing `auto` registers the custom elements; omit it when registering them explicitly.
+
+### Easing evaluation
+
+```ts
+function parseEasing(text: string, durationSeconds?: number): {
+  fn: (progress: number) => number;
+  spring?: (elapsedSeconds: number) => number;
+  diagnostics: Diagnostic[];
+};
+```
+
+`durationSeconds` defaults to `1`. Supported strings are `linear`, `ease-in`, `ease-out`, `ease-in-out`, `cubic-bezier(x1,y1,x2,y2)`, `steps(n,start)`, `steps(n,end)`, and `spring(mass,stiffness,damping,initialVelocity)`. Use the compact spelling shown for `steps`; its parser does not accept spaces inside the parentheses.
+
+`fn(progress)` evaluates normalized animation progress, normally from `0` to `1`. For a spring, it evaluates the response at `progress × durationSeconds`; the optional `spring(elapsedSeconds)` evaluates that response directly in seconds. Results may overshoot. `diagnostics` can contain `W_SPRING_UNSETTLED` when the spring still has residual motion at the supplied duration. See the [animation guide](/guide/animation.md#easing) for easing and spring behavior.
+
+Unknown easing strings, malformed Bézier expressions, Bézier x controls outside `[0,1]`, nonpositive step counts, and invalid spring parameters throw an `Error`; they are not returned as diagnostics.
+
+```js
+const { fn, diagnostics } = parseEasing('ease-out');
+const halfway = fn(0.5);
+```
 
 ## Source and compile
 
@@ -77,6 +98,7 @@ function createRenderer(compiled: CompiledComposition): Promise<Renderer>;
 interface Renderer {
   readonly state: RendererState;
   readonly revisionHash: string;
+  inspectFrame(frame: number): FrameInspection;
   renderFrame(frame: number, options?: {signal?: AbortSignal}): Promise<FrameResult>;
   renderStill(options: {
     frame: number; type: 'png'|'jpeg'; quality?: number;
@@ -98,6 +120,52 @@ interface FrameResult {
 
 - `renderFrame` returns a bitmap owned by the caller. Call the result's `close()` method when finished with it. A renderer serializes requests and may abort superseded interactive requests. Export operations are not replaced by newer requests.
 - `renderCaptions()` without options exports full root timing; with `range` it clips cues to the range and re-times them ([details](./player.md#range-export-audio-and-captions)).
+
+### Frame inspection
+
+`inspectFrame(frame)` synchronously evaluates the requested frame and returns geometry, animated values, and active transitions without painting or decoding media. The following interfaces describe its returned shape:
+
+```ts
+interface FrameInspection {
+  frame: number;
+  revisionHash: string;
+  nodes: FrameGeometryNode[];
+  transitions: {
+    type: string;
+    direction: string;
+    progress: number;
+    outgoingId: string | null;
+    incomingId: string;
+  }[];
+}
+
+interface FrameGeometryNode {
+  id: string;
+  x: number; y: number;
+  width: number; height: number;
+  rotation: number;
+  scaleX: number; scaleY: number;
+  opacity: number;
+  corners: { x: number; y: number }[];
+  values: Record<string, number | string>;
+}
+```
+
+- `frame` must be a safe integer in `[0, metadata.durationFrames)`; otherwise the call throws `E_TIME_UNIT`. Disposing/disposed sessions throw `E_DISPOSED`; initializing or error sessions throw `E_BUSY`.
+- Visual entries come from active, displayed, visible layout subtrees. `x`/`y` are layout coordinates plus animated translation; `width`/`height` are untransformed layout dimensions. `rotation` (degrees) and scales describe the node's animated channels, defaulting to `0` and `1`; they do not decompose static or inherited CSS transforms.
+- `corners` contains the four transformed border-box corners in top-left, top-right, bottom-right, bottom-left order, including ancestor transforms and slide offsets. They describe geometry before clipping, not the visible pixel bounds. `opacity` accumulates ancestor opacity and crossfade weights.
+- `values` maps contributing animated property names to evaluated numeric or string values; it is not a complete computed-style or base-gain snapshot. Active audio nodes have zero position, dimensions, and opacity, identity rotation/scales, and empty `corners`, with any animated gain in `values`.
+- Inspection uses the renderer's existing layout snapshot. For `width`, `height`, `left`, `top`, or `text-number` animations, render the requested frame first to refresh layout, then inspect it before rendering another frame.
+
+```js
+const rendered = await renderer.renderFrame(30);
+try {
+  const inspection = renderer.inspectFrame(30);
+  console.log(inspection.nodes, inspection.transitions);
+} finally {
+  rendered.close();
+}
+```
 
 ### PreflightOptions
 

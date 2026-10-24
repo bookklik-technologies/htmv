@@ -41,9 +41,9 @@ On ordinary HTML, use `data-hv-start` and `data-hv-duration`. Boolean-valued lib
 | `hv-transition` | `duration` | `type="crossfade"`, `direction="left"` | Only between direct series items; type `crossfade`/`slide`/`wipe`; direction `left/right/up/down` applies to slide/wipe |
 | `hv-loop` | `iteration-duration`, `count` | `start="0"` | Positive iteration duration; integer count ≥ 1; total is the product; finite only; rejects author `duration` |
 | `hv-freeze` | `at`, `duration` | `start="0"` | Visual descendants evaluated at fixed local time; audio descendants forbidden (`E_FREEZE_AUDIO`) |
-| `hv-video` | `src` | Common timing, `trim-in="0"`, `trim-out`, `rate="1"`, `audio="include"`, `gain="1"`, `fit="cover"`, `position="50% 50%"`, `end-behavior="error"`, `track`, `audio-track` | Visual leaf; `audio` `include`/`mute`; rate 0.25–4; fit `cover`/`contain`/`fill` |
-| `hv-audio` | `src` | Common timing, `trim-in`/`trim-out`/`rate`/`gain` as video, `repeat="false"`, `fade-in="0"`, `fade-out="0"`, `track` | Nonvisual leaf; rate 0.25–4; pitch follows rate; repetition only via explicit `repeat` |
-| `hv-animation` | `target`, `property`, `duration` | `start="0"`, `from`, `to`, `easing="linear"`, `fill="none"`, `mode="replace"` | Use either `from`/`to` attributes or `hv-keyframe` children |
+| `hv-video` | `src` | Common timing, `trim-in="0"`, `trim-out`, `rate="1"`, `audio="include"`, `gain="1"`, `fade-in="0"`, `fade-out="0"`, `fade-offset="0"`, `fade-duration` (node duration), `fit="cover"`, `position="50% 50%"`, `end-behavior="error"`, `track`, `audio-track` | Visual leaf; `audio` `include`/`mute`; fades affect audio only; rate 0.25–4; fit `cover`/`contain`/`fill` |
+| `hv-audio` | `src` | Common timing, `trim-in`/`trim-out`/`rate`/`gain` and fade controls as video, `repeat="false"`, `track` | Nonvisual leaf; rate 0.25–4; pitch follows rate; repetition only via explicit `repeat` |
+| `hv-animation` | `target`, `property`, `duration` | `start="0"`, `from`, `to`, `easing="linear"`, `fill="none"`, `mode="replace"`, `sample-start`, `sample-end` (both unclamped when omitted) | Use either `from`/`to` attributes or `hv-keyframe` children; optional bounds clamp the scope clock before progress/fill |
 | `hv-keyframe` | `offset`, `value` | `easing="linear"` | Declaration; offset number 0–1, strictly increasing |
 | `hv-captions` | inline cues OR `src` | `start="0"`, `duration` | Timed viewport-size caption overlay; source VTT times relative to this node; cue content is safe plain text |
 | `hv-cue` | `start`, `end` | none | `end > start`; plain text; half-open window relative to the captions node |
@@ -56,6 +56,8 @@ Additional rules:
 - `src` is a URL or `asset:ID`; `template` is a component ID reference such as `#stat-card`.
 - `end-behavior` accepts `error` or `hold`. Holding extends the video image; audio becomes silent after its selected interval. To repeat audio, set `repeat="true"` on an audio element.
 - Media `trim-out` defaults to the end of the selected primary playable extent; trims are validated against the video/movie playable extent (`duration="auto"` resolves to `(trimOut − trimIn)/rate`).
+- On video and audio, fade lengths must be nonnegative and each must fit within `fade-duration`, which must be positive and defaults to the node duration. The envelope samples `localTime + fadeOffset`; `fade-offset` defaults to `0`. These are output-time controls independent of source rate/trims. See [split-clip fades](/guide/audio-and-captions.md#preserving-fades-across-split-clips).
+- Animation `sample-start`/`sample-end` use scope-clock time, accept inclusive nonnegative bounds, and require `sample-end ≥ sample-start` when both are supplied. Either bound may be omitted; equal bounds hold a single sample. Target activity and fill still apply. See [sampling bounds](/guide/animation.md#sampling-bounds).
 - Supported visual boxes/leaves, `hv-scene`, `hv-video`, `hv-audio` gain, and registered plugin leaves are animation targets; structural wrappers (sequence/series/loop/freeze/use) are not.
 - Supported visual nodes accept `id`, `class`, `style`, `lang`, and `dir`. Inline styles follow the [CSS profile](/guide/text-and-css.md#supported-css-profile). Unknown library attributes fail validation.
 

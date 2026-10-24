@@ -68,6 +68,8 @@ function paintSubtreeChildren(
   void segments;
   const outgoingHandled = new Set<string>();
   for (const sceneId of roots) {
+    const outgoingT = transitionOutgoing.get(sceneId);
+    if (outgoingT && evaluation.states.has(outgoingT.incomingId)) continue;
     const incomingT = transitionByIncoming.get(sceneId);
     if (incomingT && evaluation.states.has(sceneId)) {
       const outBox = paint.boxIndex.get(incomingT.outgoingId ?? '');
@@ -182,7 +184,7 @@ function paintBoxBody(
   const bg = anim.backgroundColor ?? rgbFromComputed(box.computed.backgroundColor);
   if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
     ctx.fillStyle = bg;
-    fillRoundedRect(ctx, box.x, box.y, box.width, box.height, box.borderRadiusPx);
+    fillRoundedRect(ctx, box.x, box.y, box.width, box.height, box.borderRadiusPx, box.borderRadiusYpx);
   }
   // background image (admitted raster/gradient): painted without repeat tile layout support beyond once
   if (box.computed.backgroundImage) {
@@ -268,28 +270,51 @@ export function transformMatrix(tx: number, ty: number, angle: number, sx: numbe
   return [a, b, c, d, e, f];
 }
 
+export interface FrameGeometryNode {
+  id: string; x: number; y: number; width: number; height: number; rotation: number; scaleX: number; scaleY: number; opacity: number;
+  corners: { x: number; y: number }[]; values: Record<string, number | string>;
+}
+/** Editor geometry uses the exact transform application and evaluation used by painting. */
+export function inspectPaintFrame(ctx: CanvasRenderingContext2D, boxes: Map<string, LayoutBox>, evaluation: Evaluation, width: number, height: number): FrameGeometryNode[] {
+  const result: FrameGeometryNode[] = [];
+  const visit = (box: LayoutBox, alpha: number): void => {
+    if (!evaluation.states.has(box.id) || !box.display || box.visibility === 'hidden') return;
+    ctx.save();
+    try {
+      const transition = evaluation.transitions.find(t => t.incomingId === box.id || t.outgoingId === box.id);
+      if (transition) {
+        const incoming = transition.incomingId === box.id;
+        if (transition.type === 'crossfade') alpha *= incoming ? transition.progress : 1 - transition.progress;
+        if (transition.type === 'slide') { const dir: Record<string, [number, number]> = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }; const [x, y] = dir[transition.direction] ?? [-1, 0]; const amount = incoming ? transition.progress - 1 : transition.progress; ctx.translate(x * amount * width, y * amount * height); }
+      }
+      const values = evaluation.animatedValues.get(box.id) ?? [], anim = collectAnimated(values, box);
+      alpha *= anim.opacity !== undefined ? clampProperty('opacity', anim.opacity) : box.computed.opacity;
+      const transformed = values.some(v => ['translate-x', 'translate-y', 'rotate', 'scale-x', 'scale-y'].includes(v.property));
+      applyTransform(ctx, box, anim, transformed);
+      const matrix = ctx.getTransform();
+      const corners = [[box.x, box.y], [box.x + box.width, box.y], [box.x + box.width, box.y + box.height], [box.x, box.y + box.height]].map(([x, y]) => { const v = matrix.transformPoint({ x, y }); return { x: v.x, y: v.y }; });
+      result.push({ id: box.id, x: box.x + (anim.translateX ?? 0), y: box.y + (anim.translateY ?? 0), width: box.width, height: box.height, rotation: anim.rotate ?? 0, scaleX: anim.scaleX ?? 1, scaleY: anim.scaleY ?? 1, opacity: alpha, corners, values: Object.fromEntries(values.map(v => [v.property, v.value])) });
+      for (const child of box.children) visit(child, alpha);
+    } finally { ctx.restore(); }
+  };
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  try { for (const id of findSceneRoots(boxes)) visit(boxes.get(id)!, 1); } finally { ctx.restore(); }
+  return result;
+}
+
 function applyRoundedClip(ctx: CanvasRenderingContext2D, box: LayoutBox): void {
   ctx.beginPath();
-  roundRectPath(ctx, box.x, box.y, box.width, box.height, box.borderRadiusPx);
+  roundRectPath(ctx, box.x, box.y, box.width, box.height, box.borderRadiusPx, box.borderRadiusYpx);
   ctx.clip();
 }
 
-function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: [number, number, number, number]): void {
-  ctx.moveTo(x + r[0], y);
-  ctx.lineTo(x + w - r[1], y);
-  ctx.arcTo(x + w, y, x + w, y + r[1], r[1]);
-  ctx.lineTo(x + w, y + h - r[2]);
-  ctx.arcTo(x + w, y + h, x + w - r[2], y + h, r[2]);
-  ctx.lineTo(x + r[3], y + h);
-  ctx.arcTo(x, y + h, x, y + h - r[3], r[3]);
-  ctx.lineTo(x, y + r[0]);
-  ctx.arcTo(x, y, x + r[0], y, r[0]);
-  ctx.closePath();
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: [number, number, number, number], ry = r): void {
+  ctx.roundRect(x, y, w, h, r.map((radius, i) => ({ x: Math.max(0, radius), y: Math.max(0, ry[i]) })));
 }
 
-function fillRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: [number, number, number, number]): void {
+function fillRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: [number, number, number, number], ry = r): void {
   ctx.beginPath();
-  roundRectPath(ctx, x, y, w, h, r);
+  roundRectPath(ctx, x, y, w, h, r, ry);
   ctx.fill();
 }
 
@@ -299,6 +324,13 @@ function rgbFromComputed(color: string): string {
 
 function paintBorders(ctx: CanvasRenderingContext2D, box: LayoutBox): void {
   if (box.computed.borderStyle === 'none') return;
+  const widths = [box.computed.borderTopWidth, box.computed.borderRightWidth, box.computed.borderBottomWidth, box.computed.borderLeftWidth], width = widths[0];
+  if (width > 0 && widths.every(w => w === width) && box.borderRadiusPx.some(r => r > 0)) {
+    const ry = box.borderRadiusYpx ?? box.borderRadiusPx;
+    ctx.beginPath(); roundRectPath(ctx, box.x, box.y, box.width, box.height, box.borderRadiusPx, ry);
+    if (box.width > width * 2 && box.height > width * 2) roundRectPath(ctx, box.x + width, box.y + width, box.width - width * 2, box.height - width * 2, box.borderRadiusPx.map(r => Math.max(0, r - width)) as [number, number, number, number], ry.map(r => Math.max(0, r - width)) as [number, number, number, number]);
+    ctx.fillStyle = box.computed.borderColor; ctx.fill('evenodd'); return;
+  }
   const sides: [number, number, number, number, string][] = [
     // top
     [box.x, box.y, box.width, box.computed.borderTopWidth, `top`],
@@ -563,8 +595,8 @@ function paintTransition(
     const dir = t.direction;
     const shift = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] } as Record<string, [number, number]>;
     const sh = shift[dir] ?? [1, 0];
-    const dxOut = sh[0] * (1 - p) * 0 + sh[0] * p * (paint.width) * -1;
-    const dyOut = sh[1] * p * (paint.height) * -1;
+    const dxOut = sh[0] * p * paint.width;
+    const dyOut = sh[1] * p * paint.height;
     ctx.save();
     ctx.beginPath();
     ctx.rect(0, 0, paint.width, paint.height);
@@ -573,8 +605,8 @@ function paintTransition(
     ctx.translate(dxOut, dyOut);
     paintBoxWithChildren(paint, evaluation, outBox);
     ctx.restore();
-    const dxIn = sh[0] * (1 - p) * paint.width;
-    const dyIn = sh[1] * (1 - p) * paint.height;
+    const dxIn = sh[0] * (p - 1) * paint.width;
+    const dyIn = sh[1] * (p - 1) * paint.height;
     ctx.save();
     ctx.translate(dxIn, dyIn);
     paintBoxWithChildren(paint, evaluation, incBox);

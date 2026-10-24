@@ -30,12 +30,33 @@ Keyframe offsets must increase strictly and include both `0` and `1`. A keyframe
 
 ## Activity, fill, and endpoints
 
-For start `b` and duration `d`, progress is `(clockTime − b)/d`:
+For start `b` and duration `d`, progress is `(sampleTime − b)/d`, where `sampleTime` is the enclosing clock time unless [sampling bounds](#sampling-bounds) are supplied:
 
-- During `[b, b+d)` the easing/keyframes are evaluated.
+- For sampled scope time in `[b, b+d)`, the easing/keyframes are evaluated.
 - `fill` defaults to `none`. `backwards` applies the initial value before `b`; `forwards` holds the final evaluated value at and after `b+d`; `both` does both.
 - Fill applies only while the enclosing timeline and target are active. It does not make an inactive target visible. In a loop, fill is reevaluated using each iteration's clock.
 - Ordinary easing and keyframes finish at the declared endpoint. A spring holds its calculated value at the declared duration, which may differ from `to`. See [Springs](#springs).
+
+## Sampling bounds
+
+Optional `sample-start` and `sample-end` clamp the enclosing scope clock before progress, easing/keyframes, and fill are evaluated. Both use the normal [time value grammar](/reference/elements.md#time-value-grammar) and refer to scope time, not elapsed time since the animation's `start`.
+
+- Bounds are inclusive, nonnegative, and optional independently; an omitted bound leaves that side unclamped. If both are set, `sample-end` must be greater than or equal to `sample-start`. Invalid negative or reversed bounds report `E_ANIMATION`.
+- Equal bounds hold one sampled value. For a moving interval with held handles, use different bounds. Bounds apply to visual animations and per-sample media gain animations.
+- Clamping does not extend target or ancestor activity. Fill still applies after clamping: a bound at the animation's end requires `fill="forwards"` or `fill="both"` to contribute there. Bounds do not relax animation-conflict rules.
+
+This title holds its `1s` sample, moves from scope time `1s` through `3s`, then holds its `3s` sample for the rest of the scene:
+
+```html
+<hv-scene duration="5s">
+  <h1 id="held-title">A held animation</h1>
+  <hv-animation target="#held-title" property="translate-x"
+                duration="4s" from="0px" to="400px"
+                sample-start="1s" sample-end="3s"></hv-animation>
+</hv-scene>
+```
+
+With linear easing, the held translations are `100px` and `300px`. Set both bounds to `2s` to hold `200px` throughout the scene. In `serializeIR().animations`, supplied bounds are optional `sampleStart`/`sampleEnd` fields, each represented as exact rational seconds: `{ numerator: string, denominator: string }`.
 
 ## Property registry
 

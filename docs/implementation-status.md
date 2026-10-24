@@ -11,9 +11,20 @@ does not establish certification across browsers, operating systems, or codecs.
 - Composition timing uses exact rational seconds. Evaluation checks half-open
   intervals at every ancestor and applies nested offsets, loops, freezes,
   animation fill, and media clock mappings.
+- Optional [animation sampling bounds](./guide/animation.md#sampling-bounds)
+  clamp visual and per-sample gain clocks before progress/fill evaluation.
+  Serialized animation IR retains the bounds as exact rationals.
+- The public API exposes [easing evaluation and frame inspection](./reference/javascript-api.md).
+  Inspection returns evaluated geometry, animation values, active audio nodes,
+  and transition state using the renderer's existing layout snapshot; it does
+  not itself refresh animated layout.
 - Isolated layout preserves supported inline styles and the paint hierarchy.
   Boxes are measured with transforms neutralized. Clipping and group opacity
   apply through descendants; layout and numeric-text animation trigger remeasurement.
+- Circular and elliptical corner radii resolve percentages per axis and shrink
+  proportionally when corners overlap. Rounded fills, overflow clips, and solid
+  borders with equal edge widths share the resolved shape. Series transitions
+  paint each item once during overlaps; slide directions follow outgoing motion.
 - Compiled revisions retain programmatic asset bytes. Images, restricted static
   SVG, registered fonts, and background images reuse prepared resources.
 - Media readers initialize before use, preserve presentation timestamps, select
@@ -21,6 +32,10 @@ does not establish certification across browsers, operating systems, or codecs.
 - Audio mixing uses bounded source pages, exact source phase, a pinned
   fractional-phase sinc filter, separate stereo channels, Float64 accumulation,
   per-sample envelopes, and one final clamp. Preview schedules bounded AudioBuffers.
+- Video and audio support fade envelopes with independent offsets and durations
+  to preserve envelope position across split clips. Preview emits per-block
+  [`hv-level`](./reference/player.md#events) peak and clipped-channel-sample
+  measurements during audio scheduling.
 - Muxing writes directly to positioned or append-only destinations with awaited
   backpressure. File streams remain open for the session. Failure/cancellation
   aborts the owned writer; memory output enforces an admission limit.
