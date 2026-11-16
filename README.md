@@ -17,8 +17,8 @@ No render server, headless browser, or server-side FFmpeg is required at runtime
 Made with HTMV: eight chapters covering composition, timing, templates, media,
 export, and plugins. See the [film source and chapter guide](examples/product-intro/README.md).
 
-> **Status:** implements [SPEC.md](SPEC.md), revision 1.0 (17 October 2026),
-> with automated regression coverage. Full conformance, long-export budgets,
+> **Status:** [SPEC.md](SPEC.md) is an implementation-derived working contract,
+> not the missing historical revision 1.0. Full conformance, long-export budgets,
 > and browser/profile certification remain release gates.
 > See [implementation and validation status](docs/implementation-status.md).
 
@@ -30,6 +30,7 @@ export, and plugins. See the [film source and chapter guide](examples/product-in
 - **Media and captions:** trimmed video, layered audio, gain and fades, burned-in captions, and WebVTT.
 - **Browser exports:** MP4/WebM, still images, progress, cancellation, and render manifests.
 - **Custom rendering:** deterministic plugins with seeded randomness.
+- **Open-ended design:** freeform layouts and an optional SenangStart Icons and Shapes integration, with no template lock-in. See [creative compositions](docs/guide/creative-compositions.md).
 
 ## Quick start
 
@@ -46,7 +47,7 @@ import '@bookklik/htmv/auto';
 ```
 
 The root import does not register custom elements. Call `registerElements()` explicitly
-or import `/auto` when using them. Version `0.1.2` includes compiled ESM, TypeScript
+or import `/auto` when using them. Version `0.1.3` includes compiled ESM, TypeScript
 declarations, and runtime dependencies; no sibling checkout or internal `@htmv/*`
 packages are needed. The npm package contains the runtime, while the repository
 contains the examples and documentation.
@@ -92,11 +93,12 @@ capability preflight, export, and resource cleanup.
 
 ## Examples
 
-All six examples include local assets, composition source, frame stepping,
+All seven examples include local assets, composition source, frame stepping,
 PNG capture, and cancellable MP4/WebM export with capability preflight.
 
 | Example | Explore |
 | --- | --- |
+| [Creative studio](examples/creative-studio/index.html) | Explore twelve distinct composition layouts, landscape/portrait/square formats, custom palettes, and the full bundled SenangStart Icons and Shapes catalogs. |
 | [Product introduction](examples/product-intro/index.html) | A 60-second film with chapter preview/export, real media, templates, and plugins. Includes a rendered MP4 and manifest. |
 | [Hello](examples/hello/index.html) | Edit a headline and see automatic player recompilation. |
 | [Data template](examples/data-template/index.html) | Drive repeated components and number animations with typed metrics. Invalid revisions preserve the working preview. |
@@ -155,7 +157,7 @@ npm run test:browser  # Playwright conformance and parity regressions
 ```
 
 `npm pack` runs the package build through `prepack` and creates
-`bookklik-htmv-0.1.2.tgz`. See the [npm release guide](https://bookklik-technologies.github.io/htmv/reference/npm-package.html)
+`bookklik-htmv-0.1.3.tgz`. See the [npm release guide](https://bookklik-technologies.github.io/htmv/reference/npm-package.html)
 for isolated consumer verification and publication instructions. Packaging does not
 run unit tests or publish a release.
 

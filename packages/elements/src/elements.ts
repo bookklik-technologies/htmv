@@ -1,11 +1,13 @@
 /** Inert declarations and an owning, mutation-aware canonical player element. */
 import { Diagnostic, FrameRange } from '@htmv/core';
 import { CompiledCompositionImpl, CompileOptions, parseHtml, CNode } from '@htmv/compiler';
-import { RendererSession, PreflightOptions, ExportOptions, compileBrowser } from '@htmv/exporter';
-import { PlayerEngine, PlayerEventName } from '@htmv/player';
+import { RendererSession, PreflightOptions, ExportOptions, compileBrowser, LIBRARY_VERSION } from '@htmv/exporter';
+import { PlayerEngine, PlayerEventName, playerErrorDetail } from '@htmv/player';
 
 export interface RegisterOptions { prefix?: string }
 let registered = false; let activePrefix = 'hv';
+const registrationKey = Symbol.for(`@htmv/elements/registration/${LIBRARY_VERSION}`);
+type ElementRegistry = CustomElementRegistry & { [registrationKey]?: { prefix: string; player: CustomElementConstructor } };
 export function isRegistered(): boolean { return registered; }
 export function registeredPrefix(): string { return activePrefix; }
 export interface HtmvPlayerElement extends HTMLElement {
@@ -15,6 +17,11 @@ export interface HtmvPlayerElement extends HTMLElement {
 export function registerElements(options?: RegisterOptions): void {
   const prefix = options?.prefix ?? 'hv';
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(prefix)) throw new Error('Invalid custom element prefix.');
+  const previousRegistration = (customElements as ElementRegistry)[registrationKey];
+  if (previousRegistration && customElements.get(`${previousRegistration.prefix}-player`) === previousRegistration.player) {
+    if (previousRegistration.prefix !== prefix) throw new Error(`Elements already registered with prefix ${previousRegistration.prefix}.`);
+    registered = true; activePrefix = prefix; return;
+  }
   if (registered) { if (prefix === activePrefix) return; throw new Error(`Elements already registered with prefix ${activePrefix}.`); }
   const names = ['composition', 'assets', 'asset', 'scene', 'sequence', 'series', 'transition', 'loop', 'freeze', 'video', 'audio', 'animation', 'keyframe', 'captions', 'cue', 'use', 'player'];
   for (const suffix of names) if (customElements.get(`${prefix}-${suffix}`)) throw new Error(`Custom element ${prefix}-${suffix} is already defined.`);
@@ -40,7 +47,16 @@ export function registerElements(options?: RegisterOptions): void {
     pause(): void { this.engine?.pause(); }
     async seekToFrame(frame: number): Promise<void> { if (!this.engine) await this.attach(); await this.engine?.seekToFrame(frame); }
     connectedCallback(): void { document.addEventListener('visibilitychange', this.visibility); this.schedule(); }
-    attributeChangedCallback(): void { this.lastSource = null; this.schedule(); }
+    attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null): void {
+      if (oldValue === newValue) return;
+      if (name === 'fit') {
+        const canvas = this.querySelector<HTMLCanvasElement>(':scope > canvas');
+        if (canvas) canvas.style.objectFit = newValue ?? 'contain';
+        return;
+      }
+      if (name === 'loop' && this.engine) { this.engine.setLoop(newValue !== null); return; }
+      this.lastSource = null; this.schedule();
+    }
     disconnectedCallback(): void {
       queueMicrotask(() => {
         if (this.isConnected) return;
@@ -68,11 +84,16 @@ export function registerElements(options?: RegisterOptions): void {
         void this.retire(previous); return;
       }
       const id = this.getAttribute('for'); const composition = id ? document.getElementById(id) : null;
-      if (!composition) { this.showError(new Error(`hv-player for="${id ?? ''}" did not match a composition.`)); return; }
+      if (!composition || composition.localName !== `${prefix}-composition`) { this.showError(new Error(`hv-player for="${id ?? ''}" did not match a composition.`)); return; }
+      const sourceText = (): string => {
+        const clone = composition.cloneNode(true) as Element;
+        for (const player of clone.querySelectorAll(`${prefix}-player`)) player.remove();
+        return clone.outerHTML;
+      };
+      const source = sourceText();
       this.observer?.disconnect();
-      this.observer = new MutationObserver(() => this.schedule());
+      this.observer = new MutationObserver(() => { if (sourceText() !== source) this.schedule(); });
       this.observer.observe(composition, { attributes: true, childList: true, characterData: true, subtree: true });
-      const source = composition.outerHTML;
       if (source === this.lastSource && this.auto) return;
       let compiled: CompiledCompositionImpl | null = null; let renderer: RendererSession | null = null;
       this.setAttribute('aria-busy', 'true');
@@ -98,7 +119,7 @@ export function registerElements(options?: RegisterOptions): void {
     }
     private async bind(renderer: RendererSession, compiled: CompiledCompositionImpl): Promise<void> {
       this.engine?.stop();
-      let canvas = this.querySelector('canvas'); if (!canvas) { canvas = document.createElement('canvas'); this.appendChild(canvas); }
+      let canvas = this.querySelector<HTMLCanvasElement>(':scope > canvas'); if (!canvas) { canvas = document.createElement('canvas'); this.appendChild(canvas); }
       canvas.width = compiled.metadata.width; canvas.height = compiled.metadata.height;
       Object.assign(canvas.style, { width: '100%', height: 'auto', display: 'block', objectFit: this.getAttribute('fit') ?? 'contain' });
       const engine = new PlayerEngine(compiled, renderer, { target: canvas, loop: this.hasAttribute('loop'), onEvent: (name, detail) => {
@@ -123,13 +144,14 @@ export function registerElements(options?: RegisterOptions): void {
     }
     private showError(e: unknown): void {
       if ((e as { name?: string } | null)?.name === 'AbortError') return;
-      const diagnostics = (e as { diagnostics?: readonly Diagnostic[] }).diagnostics;
-      this.emit('hv-error', { diagnostics, message: (e as Error).message });
+      const detail = playerErrorDetail(e);
+      this.emit('hv-error', detail);
       let panel = this.querySelector('.hv-error-panel'); if (!panel) { panel = document.createElement('div'); panel.className = 'hv-error-panel'; panel.setAttribute('role', 'alert'); this.appendChild(panel); }
-      panel.textContent = diagnostics?.map((d) => `${d.code}: ${d.message}`).join('\n') ?? (e as Error).message;
+      panel.textContent = detail.diagnostics.map((d) => `${d.code}: ${d.message}`).join('\n');
     }
     private emit(name: PlayerEventName, detail: unknown): void { this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true })); }
   });
+  (customElements as ElementRegistry)[registrationKey] = { prefix, player: customElements.get(`${prefix}-player`)! };
   registered = true;
 }
 export type { PreflightOptions, ExportOptions, CompileOptions, Diagnostic };

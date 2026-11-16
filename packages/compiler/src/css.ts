@@ -191,7 +191,7 @@ export function expandShorthand(property: string, value: string): [string, strin
     return out;
   }
   if (property === 'font') {
-    return [['font-family', value]];
+    return [];
   }
   if (property === 'text-decoration') {
     return [['text-decoration-line', value]];
@@ -233,6 +233,9 @@ export function validateDeclaration(property: string, value: string): { ok: bool
     return { ok: false, message: '!important is not admitted.', expanded: [] };
   }
   if (SUPPORTED_PROPERTIES.has(prop)) {
+    if (prop === 'font') {
+      return { ok: false, message: 'The font shorthand is not supported; use explicit font-family/size/weight/style and line-height declarations.', expanded: [] };
+    }
     if (prop === 'position' && /sticky|fixed/.test(val)) {
       return { ok: false, message: `position:${val} is unsupported (static/relative/absolute only).`, expanded: [] };
     }
@@ -255,7 +258,10 @@ export function validateDeclaration(property: string, value: string): { ok: bool
       }
     }
     const enumRe = ADMITTED_ENUM_VALUES[prop];
-    if (enumRe && !(enumRe.test(val) || /^[\d.%]+/.test(val) || val.startsWith('var(') || val.startsWith('calc('))) {
+    const backgroundSizeParts = prop === 'background-size' ? splitTopLevel(val, ' ') : [];
+    const backgroundSize = backgroundSizeParts.length >= 1 && backgroundSizeParts.length <= 2
+      && backgroundSizeParts.every((part) => /^(?:auto|0|(?:\d*\.)?\d+(?:px|%|em|rem|vw|vh))$/.test(part));
+    if (enumRe && !(enumRe.test(val) || backgroundSize || val.startsWith('var(') || prop === 'background-size' && val.startsWith('calc('))) {
       return { ok: false, message: `Value "${val}" for ${prop} is outside the supported profile.`, expanded: [] };
     }
     return { ok: true, expanded: expandShorthand(prop, val) };

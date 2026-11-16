@@ -132,6 +132,7 @@ export class TimingResolver {
         continue;
       }
       if (child.tag === 'hv-transition') {
+        this.validateEnums(child);
         if (!isSeries) {
           this.diag(error('E_TRANSITION_PARENT', 'hv-transition is only valid between direct series items.', { attribute: 'hv-transition' }));
           continue;
@@ -233,15 +234,15 @@ export class TimingResolver {
   }
 
   private resolveMediaAuto(node: ResolvedNode): Rational {
-    if (!node.media || !this.mediaExtents) return Rational.zero();
-    const ext = this.mediaExtents.getExtent(node.attributes['src'] ?? '', node.kind === 'video' ? 'video' : 'audio');
+    if (!node.media) return Rational.zero();
+    const ext = this.mediaExtents?.getExtent(node.attributes['src'] ?? '', node.kind === 'video' ? 'video' : 'audio');
     if (!ext) {
       this.diag(error('E_ASSET_FETCH', `Source metadata for "${node.attributes['src']}" could not be inspected; duration=auto cannot resolve.`));
       return Rational.zero();
     }
     const extent = node.kind === 'video' ? ext.videoExtent : ext.audioExtent;
     if (extent === undefined) {
-      this.diag(error('E_CODEC_DECODE', `No playable ${node.kind} extent for "${node.attributes['src']}".`));
+      this.diag(error('E_ASSET_FETCH', `Playable ${node.kind} extent for "${node.attributes['src']}" is unknown; duration=auto cannot resolve.`));
       return Rational.zero();
     }
     const trimOut = node.media.trimOut ?? extent;
@@ -308,7 +309,7 @@ export class TimingResolver {
       this.diag(error('E_SERIES_START', 'An explicit start on a direct series item is invalid; series timing is structural.'));
       return null;
     }
-    const schema = HV_ELEMENTS[node.tag];
+    const schema = Object.prototype.hasOwnProperty.call(HV_ELEMENTS, node.tag) ? HV_ELEMENTS[node.tag] : undefined;
     if (!schema) {
       // ordinary HTML: check supported visual element
       if (VISUAL_CONTAINERS.has(node.tag) || TEXT_LEAVES.has(node.tag)) {
@@ -325,11 +326,15 @@ export class TimingResolver {
       return null;
     }
 
+    const kind = this.kindFor(node.tag);
+    if (kind === null) {
+      this.diag(error('E_ELEMENT_UNSUPPORTED', `Element <${node.tag}> is not supported here.`));
+      return null;
+    }
     const id = this.nextId(node);
     for (const required of schema.required) if (!node.attributes[required]) this.diag(error('E_UNKNOWN_ATTR', `${node.tag} requires ${required}.`, { attribute: required, nodeId: id }));
     const allowed = new Set([...schema.required, ...schema.optional, ...(schema.timing ? ['start', 'duration'] : []), 'id', 'class', 'style', 'lang', 'dir']);
     for (const attr of Object.keys(node.attributes)) if (!allowed.has(attr) && !attr.startsWith('data-') && !attr.startsWith('aria-') && !attr.startsWith('hv-')) this.diag(error('E_UNKNOWN_ATTR', `${node.tag} does not accept ${attr}.`, { attribute: attr, nodeId: id }));
-    const kind = this.kindFor(node.tag);
     const resolved: ResolvedNode = {
       id,
       nodeId: id,
@@ -439,6 +444,10 @@ export class TimingResolver {
           this.diag(error('E_DURATION', 'Source trims are nonnegative.', { attribute: 'trim-in', nodeId: id }));
         }
         const trimOut = node.attributes['trim-out'] !== undefined ? this.parseTime(node.attributes['trim-out'], node, 'trim-out') : undefined;
+        for (const attribute of ['trim-in', 'trim-out']) {
+          if (node.attributes[attribute] !== undefined && node.attributes[attribute].trim() === '') this.diag(error('E_TIME_UNIT', `${attribute} requires an explicit time value.`, { attribute, nodeId: id }));
+        }
+        if (trimOut?.lt(Rational.zero())) this.diag(error('E_DURATION', 'Source trims are nonnegative.', { attribute: 'trim-out', nodeId: id }));
         const rateText = node.attributes['rate'] ?? '1';
         let rate = Rational.of(1n);
         try {
@@ -596,6 +605,7 @@ export class TimingResolver {
   }
 
   private resolveAnimation(node: CNode, scopeId: string): void {
+    this.validateEnums(node);
     const id = this.nextId(node);
     const target = node.attributes['target'] ?? '';
     const property = node.attributes['property'] ?? '';
@@ -672,7 +682,17 @@ export class TimingResolver {
     this.animations.push(anim);
   }
 
-  private kindFor(tag: string): ResolvedNode['kind'] {
+  private validateEnums(node: Pick<CNode, 'tag' | 'attributes'>): void {
+    const schema = Object.prototype.hasOwnProperty.call(HV_ELEMENTS, node.tag) ? HV_ELEMENTS[node.tag] : undefined;
+    if (!schema) return;
+    for (const attribute of [...schema.required, ...schema.optional]) {
+      const value = node.attributes[attribute];
+      const allowed = Object.prototype.hasOwnProperty.call(ENUMERATED_BOOLEAN, attribute) ? ENUMERATED_BOOLEAN[attribute] : undefined;
+      if (value !== undefined && allowed && !allowed.includes(value)) this.diag(error('E_ENUM', `Attribute "${attribute}" accepts only ${allowed.join('/')}; received "${value}".`, { attribute, nodeId: node.attributes.id }));
+    }
+  }
+
+  private kindFor(tag: string): ResolvedNode['kind'] | null {
     switch (tag) {
       case 'hv-composition': return 'composition';
       case 'hv-scene': return 'scene';
@@ -683,7 +703,7 @@ export class TimingResolver {
       case 'hv-video': return 'video';
       case 'hv-audio': return 'audio';
       case 'hv-captions': return 'captions';
-      default: return 'box';
+      default: return null;
     }
   }
 
@@ -691,16 +711,15 @@ export class TimingResolver {
   validateAll(): void {
     for (const node of this.nodes.values()) {
       // trim validation against playable extents (spec 4.4, 9.7)
-      if ((node.kind === 'video' || node.kind === 'audio') && node.media && this.mediaExtents) {
-        const ext = this.mediaExtents.getExtent(node.attributes['src'] ?? '', node.kind === 'video' ? 'video' : 'audio');
-        if (ext) {
-          const extent = node.kind === 'video' ? ext.videoExtent : ext.audioExtent;
-          if (extent && node.media.trimOut === null) node.media.trimOut = extent;
-          if (extent !== undefined && node.media.trimOut !== null && node.media.trimOut.gt(extent)) {
+      if ((node.kind === 'video' || node.kind === 'audio') && node.media) {
+        const ext = this.mediaExtents?.getExtent(node.attributes['src'] ?? '', node.kind === 'video' ? 'video' : 'audio');
+        const extent = node.kind === 'video' ? ext?.videoExtent : ext?.audioExtent;
+        if (extent === undefined) {
+          this.diag(warning('W_MEDIA_EXTENT_UNKNOWN', `Playable ${node.kind} extent for "${node.attributes['src']}" is unknown; source bounds cannot be verified.`, { nodeId: node.id }));
+        } else {
+          if (node.media.trimOut === null) node.media.trimOut = extent;
+          if (node.media.trimOut !== null && node.media.trimOut.gt(extent)) {
             this.diag(error('E_DURATION', `trim-out ${node.media.trimOut.toString()}s exceeds the playable ${node.kind} extent ${extent.toString()}s of "${node.attributes['src']}".`, { attribute: 'trim-out', nodeId: node.id }));
-          }
-          if (node.media.trimOut !== null && node.media.trimOut.lte(node.media.trimIn)) {
-            this.diag(error('E_DURATION', 'trim-in < trim-out is required.', { attribute: 'trim-out', nodeId: node.id }));
           }
         }
       }
@@ -711,12 +730,7 @@ export class TimingResolver {
         for (const value of [node.media.track, node.media.audioTrack]) if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) this.diag(error('E_CODEC_DECODE', 'Track indices must be nonnegative safe integers.', { nodeId: node.id }));
         if (typeof node.duration === 'object') for (const fade of [node.media.fadeIn, node.media.fadeOut]) if (fade && (fade.lt(Rational.zero()) || fade.gt(node.media.fadeDuration ?? node.duration))) this.diag(error('E_DURATION', 'Audio fades must lie within their envelope duration.', { nodeId: node.id }));
       }
-      for (const [attr, value] of Object.entries(node.attributes)) {
-        const allowed = ENUMERATED_BOOLEAN[attr];
-        if (allowed && !allowed.includes(value)) {
-          this.diag(error('E_ENUM', `Attribute "${attr}" accepts only ${allowed.join('/')}; received "${value}".`, { attribute: attr, nodeId: node.id }));
-        }
-      }
+      this.validateEnums(node);
       if (node.kind === 'video' && node.attributes['duration'] === 'auto') {
         // auto allowed on media leaves
       } else if (node.kind !== 'video' && node.kind !== 'audio' && node.attributes['duration'] === 'auto') {

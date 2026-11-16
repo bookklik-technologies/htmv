@@ -10,6 +10,16 @@ import { Diagnostic } from '@htmv/core';
 
 export type PlayerEventName = 'hv-ready' | 'hv-frame' | 'hv-play' | 'hv-pause' | 'hv-ended' | 'hv-diagnostic' | 'hv-error' | 'hv-level';
 
+export function playerErrorDetail(reason: unknown): { message: string; diagnostics: readonly Diagnostic[] } {
+  const failure = reason as { message?: unknown; code?: unknown; diagnostics?: readonly Diagnostic[] } | null;
+  const message = typeof failure?.message === 'string' ? failure.message : String(reason);
+  const supplied = failure?.diagnostics;
+  const diagnostics = Array.isArray(supplied) && supplied.length ? supplied : [{
+    severity: 'error' as const, code: typeof failure?.code === 'string' ? failure.code : 'E_PLAYER', message, recoverable: false
+  }];
+  return { message, diagnostics };
+}
+
 export interface PlayerOptions {
   target: HTMLCanvasElement;
   onEvent: (name: PlayerEventName, detail: unknown) => void;
@@ -69,6 +79,8 @@ export class PlayerEngine {
     return this.currentFrame;
   }
 
+  setLoop(loop: boolean): void { this.looping = loop; }
+
   async start(range?: FrameRange): Promise<void> {
     if (!this.renderer || this.closed) return;
     if (this.playing) return;
@@ -86,6 +98,7 @@ export class PlayerEngine {
     if (hasAudio && this.previewAudioEnabled) {
       await this.startPreviewAudio();
     }
+    if (!this.playing || this.closed) return;
     this.tick();
   }
 
@@ -194,7 +207,7 @@ export class PlayerEngine {
     this.currentFrame = Math.max(from, Math.min(to - 1, desired));
     // render at presentation opportunity; skip stale visual frames if behind
     if (this.currentFrame !== this.lastRendered && this.activeRequest?.frame !== this.currentFrame && this.pendingRequest?.frame !== this.currentFrame && this.activeRequest?.kind !== 'seek' && this.pendingRequest?.kind !== 'seek') {
-      void this.renderAndShow(this.currentFrame).catch((e) => { if ((e as Error).name === 'AbortError') return; this.pause(); this.onEvent('hv-error', { message: (e as Error).message }); });
+      void this.renderAndShow(this.currentFrame).catch((e) => { if ((e as { name?: string } | null)?.name === 'AbortError') return; this.pause(); this.onEvent('hv-error', playerErrorDetail(e)); });
     }
     this.raf = requestAnimationFrame(this.tick);
   };
@@ -236,7 +249,7 @@ export class PlayerEngine {
             source.start(this.audioEpoch + index / sampleRate); index += count;
           }
           if (index < total) this.audioTimer = setTimeout(() => { void fill(); }, 25);
-        } catch (e) { this.onEvent('hv-error', { message: (e as Error).message }); this.pause(); }
+        } catch (e) { if (generation !== this.audioGeneration || !this.playing || this.closed) return; this.onEvent('hv-error', playerErrorDetail(e)); this.pause(); }
       };
       await fill();
     } catch (e) {

@@ -3,7 +3,7 @@
  * background/border of a node then children. Scenes composited in source order.
  * Group opacity is applied to an isolated surface, not multiplied into children.
  */
-import { Rational } from '@htmv/core';
+import { Rational, error } from '@htmv/core';
 import { Evaluation, MediaRequest, parseColorSafe, clampProperty } from './evaluate.js';
 import type { LayoutBox } from '@htmv/layout-dom';
 import { layoutText } from '@htmv/layout-dom';
@@ -25,6 +25,7 @@ export interface PaintContext {
   background: string;
   boxIndex: Map<string, LayoutBox>;
   media: MediaSurfaceProvider | null;
+  surfacePool?: HTMLCanvasElement[];
 }
 
 export interface MediaSurfaceProvider {
@@ -34,8 +35,16 @@ export interface MediaSurfaceProvider {
 }
 
 export function paintFrame(paint: PaintContext, evaluation: Evaluation): void {
+  const canvas = paint.ctx.canvas;
+  let surfaces = paint.surfacePool;
+  if (!surfaces) {
+    surfaces = surfacePools.get(canvas);
+    if (!surfaces) { surfaces = []; surfacePools.set(canvas, surfaces); }
+  }
+  paint = { ...paint, surfacePool: surfaces };
   const { ctx, width, height } = paint;
   ctx.save();
+  try {
   ctx.clearRect(0, 0, width, height);
   // root background (spec 4.3): opaque 8-bit SDR surface
   ctx.fillStyle = paint.background;
@@ -49,7 +58,10 @@ export function paintFrame(paint: PaintContext, evaluation: Evaluation): void {
   void rootBoxChildren;
 
   paintSubtreeChildren(paint, evaluation, 'composition-root-placeholder', transitionByIncoming, transitionOutgoing);
-  ctx.restore();
+  } finally {
+    ctx.restore();
+    for (const surface of surfaces) borrowedSurfaces.delete(surface);
+  }
 }
 
 function paintSubtreeChildren(
@@ -111,23 +123,24 @@ function paintBoxWithChildren(paint: PaintContext, evaluation: Evaluation, box: 
   if (isolated) {
     // isolated group alpha onto bounded reusable surface (spec 5.1)
     const surface = getIsolatedSurface(paint, paint.width, paint.height);
-    const sctx = surface.getContext('2d') as CanvasRenderingContext2D;
-    sctx.clearRect(0, 0, surface.width, surface.height);
-    sctx.setTransform(ctx.getTransform());
     try {
+    const sctx = surface.getContext('2d') as CanvasRenderingContext2D;
+    sctx.setTransform(ctx.getTransform());
     paintBoxBody({ ...paint, ctx: sctx }, evaluation, box, anim, 0, 0);
     ctx.save();
+    try {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha *= groupAlpha;
     ctx.drawImage(surface, 0, 0);
-    ctx.restore();
+    } finally { ctx.restore(); }
     } finally { releaseIsolatedSurface(surface); }
     return;
   }
   ctx.save();
+  try {
   ctx.globalAlpha *= groupAlpha;
   paintBoxBody(paint, evaluation, box, anim, 0, 0);
-  ctx.restore();
+  } finally { ctx.restore(); }
 }
 
 function collectAnimated(values: { property: string; value: number | string }[], box: LayoutBox): {
@@ -172,6 +185,7 @@ function paintBoxBody(
 ): void {
   const ctx = paint.ctx;
   ctx.save();
+  try {
   // transform: animated channels replace static transform (spec 6.3)
   const hasAnimatedTransform = anim.translateX !== undefined || anim.translateY !== undefined || anim.rotate !== undefined || anim.scaleX !== undefined || anim.scaleY !== undefined;
   applyTransform(ctx, box, anim, hasAnimatedTransform);
@@ -179,7 +193,7 @@ function paintBoxBody(
   if (box.overflowHidden) {
     applyRoundedClip(ctx, box);
   }
-  if (box.visibility !== 'visible') { paintChildren(paint, evaluation, box); ctx.restore(); return; }
+  if (box.visibility !== 'visible') { paintChildren(paint, evaluation, box); return; }
   // background
   const bg = anim.backgroundColor ?? rgbFromComputed(box.computed.backgroundColor);
   if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
@@ -203,16 +217,21 @@ function paintBoxBody(
     paintCaptionsInline(paint, evaluation, box);
   }
   paintChildren(paint, evaluation, box);
-  ctx.restore();
+  } finally { ctx.restore(); }
 }
 
 function paintChildren(paint: PaintContext, evaluation: Evaluation, box: LayoutBox): void {
   const handled = new Set<string>();
+  const transitions = evaluation.transitions.filter((transition) => transition.outgoingId !== null
+    && box.children.some((child) => child.id === transition.outgoingId)
+    && box.children.some((child) => child.id === transition.incomingId)
+    && evaluation.states.has(transition.outgoingId) && evaluation.states.has(transition.incomingId));
+  const incomingIds = new Set(transitions.map((transition) => transition.incomingId));
   for (const child of box.children) {
-    if (handled.has(child.id)) continue;
+    if (handled.has(child.id) || incomingIds.has(child.id)) continue;
     const state = evaluation.states.get(child.id);
     if (!state) continue;
-    const transition = evaluation.transitions.find((t) => t.outgoingId === child.id);
+    const transition = transitions.find((t) => t.outgoingId === child.id);
     const incoming = transition ? box.children.find((c) => c.id === transition.incomingId) : undefined;
     if (transition && incoming && evaluation.states.has(incoming.id)) {
       paintTransition(paint, evaluation, transition, child, incoming);
@@ -456,29 +475,46 @@ function fakeRequest(): MediaRequest {
 }
 
 // ---- isolated surfaces (bounded, spec 8.4) --------------------
-const surfacePool: HTMLCanvasElement[] = [];
+const surfacePools = new WeakMap<HTMLCanvasElement | OffscreenCanvas, HTMLCanvasElement[]>();
 const borrowedSurfaces = new Set<HTMLCanvasElement>();
+
+export function releasePaintSurfaces(canvas: HTMLCanvasElement | OffscreenCanvas): void {
+  const surfaces = surfacePools.get(canvas);
+  if (!surfaces) return;
+  surfacePools.delete(canvas);
+  releasePaintSurfacePool(surfaces);
+}
+
+export function releasePaintSurfacePool(surfaces: HTMLCanvasElement[]): void {
+  for (const surface of surfaces) { borrowedSurfaces.delete(surface); surface.width = surface.height = 0; }
+  surfaces.length = 0;
+}
 
 function getIsolatedSurface(paint: PaintContext, w: number, h: number): HTMLCanvasElement {
   const cw = Math.max(1, Math.ceil(w));
   const ch = Math.max(1, Math.ceil(h));
-  const existing = surfacePool.find((c) => !borrowedSurfaces.has(c) && c.width === cw && c.height === ch);
+  const surfacePool = paint.surfacePool!;
+  const existing = surfacePool.find((c) => !borrowedSurfaces.has(c) && c.width === cw && c.height === ch)
+    ?? surfacePool.find((c) => !borrowedSurfaces.has(c));
   if (existing) {
-    // crop draw handled by caller using surface coordinates starting 0,0 with size cw/ch
+    if (existing.width !== cw || existing.height !== ch) {
+      existing.width = cw; existing.height = ch;
+    } else {
+      const ctx = existing.getContext('2d')!;
+      if (typeof ctx.reset === 'function') ctx.reset(); else existing.width = cw;
+    }
     borrowedSurfaces.add(existing); return existing;
   }
+  if (surfacePool.length >= 8) throw error('E_RESOURCE_LIMIT', 'Too many simultaneous compositing surfaces.');
   const c = document.createElement('canvas');
   c.width = cw;
   c.height = ch;
-  if (borrowedSurfaces.size >= 8) throw new Error('E_RESOURCE_LIMIT: too many simultaneous compositing surfaces.');
   surfacePool.push(c); borrowedSurfaces.add(c);
   return c;
 }
 
 function releaseIsolatedSurface(c: HTMLCanvasElement): void {
   borrowedSurfaces.delete(c);
-  const index = surfacePool.indexOf(c); if (index >= 0) surfacePool.splice(index, 1);
-  c.width = c.height = 0;
 }
 
 function paintBackgroundImage(paint: PaintContext, box: LayoutBox): void {
@@ -575,8 +611,9 @@ function paintTransition(
   const p = t.progress;
   if (t.type === 'crossfade') {
     const mix = getIsolatedSurface(paint, paint.width, paint.height);
-    const layer = getIsolatedSurface(paint, paint.width, paint.height);
+    let layer: HTMLCanvasElement | null = null;
     try {
+      layer = getIsolatedSurface(paint, paint.width, paint.height);
       const mctx = mix.getContext('2d')!;
       const lctx = layer.getContext('2d')!;
       mctx.clearRect(0, 0, mix.width, mix.height);
@@ -588,7 +625,7 @@ function paintTransition(
         mctx.drawImage(layer, 0, 0);
       }
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(mix, 0, 0); ctx.restore();
-    } finally { releaseIsolatedSurface(layer); releaseIsolatedSurface(mix); }
+    } finally { if (layer) releaseIsolatedSurface(layer); releaseIsolatedSurface(mix); }
     return;
   }
   if (t.type === 'slide') {

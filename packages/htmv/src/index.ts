@@ -16,12 +16,14 @@ export type { MediabunnyAdapterPublic } from '@htmv/media-mediabunny';
 // Name the inspection results so hosts can emit declarations for inferred API wrappers.
 export type { FrameGeometryNode } from '@htmv/renderer-canvas';
 export type { MediaInspection } from '@htmv/media';
+export { certifyProfile, certifiedProfiles, clearProfileCertifications } from '@htmv/exporter';
+export type { AudioSyncEvidence } from '@htmv/exporter';
 
 /** createRenderer acquires session state against a compiled composition (spec 13.1). */
 import type { CompiledCompositionImpl } from '@htmv/compiler';
-import type { RendererSession as InternalRendererSession } from '@htmv/exporter';
+import { RendererSession as InternalRendererSession } from '@htmv/exporter';
 export async function createRenderer(compiled: CompiledCompositionImpl): Promise<RendererSession> {
-  const renderer = new (await import('@htmv/exporter')).RendererSession(compiled);
+  const renderer = new InternalRendererSession(compiled);
   await renderer.initialize();
   return renderer;
 }

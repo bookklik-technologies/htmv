@@ -13,6 +13,7 @@ const kernels = new Map<string, Float64Array>();
 
 /** Fractional-phase Kaiser-windowed sinc, normalized for unity DC response. */
 export function resampleWindow(center: Rational, window: Float32Array, cutoff = 1): number {
+  if (!Number.isFinite(cutoff) || cutoff <= 0 || cutoff > 1) throw new RangeError('Resampler cutoff must be in (0, 1].');
   const fraction = center.frac().toNumber();
   const key = `${center.frac()}|${cutoff}`;
   const cached = kernels.get(key);
@@ -36,40 +37,12 @@ export function resampleWindow(center: Rational, window: Float32Array, cutoff = 
 }
 
 export function getSincSmoke(): number[] {
-  return [...getSincTable()];
-}
-
-let windowTable: Float64Array | null = null;
-
-function getSincTable(): Float64Array {
-  if (windowTable) return windowTable;
-  const n = RESAMPLER_TAPS * 2 + 1;
-  const t = new Float64Array(n);
-  const beta = 6;
-  const bessel0 = (v: number): number => {
-    let sum = 1;
-    let term = 1;
-    const v2 = (v / 2) * (v / 2);
-    for (let k = 1; k <= 16; k++) {
-      term = (term * v2) / (k * k);
-      sum += term;
-      if (term < 1e-14) break;
-    }
-    return sum;
-  };
-  const kaiser = (x: number): number => {
-    const half = RESAMPLER_TAPS;
-    const normalized = x / half;
-    if (Math.abs(normalized) > 1) return 0;
-    return bessel0(beta * Math.sqrt(Math.max(0, 1 - normalized * normalized)));
-  };
-  for (let i = 0; i < n; i++) {
-    const x = i - RESAMPLER_TAPS;
-    const sinc = Math.abs(x) < 1e-9 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x);
-    t[i] = sinc * kaiser(x);
-  }
-  windowTable = t;
-  return t;
+  const impulse = new Float32Array(RESAMPLER_TAPS * 2 + 1);
+  return Array.from(impulse, (_, index) => {
+    impulse.fill(0);
+    impulse[index] = 1;
+    return resampleWindow(Rational.zero(), impulse);
+  });
 }
 
 /**
@@ -86,14 +59,15 @@ export function resampleBlock(
   channelIndex: number,
   windowSource: Float32Array | null,
   fade: (outIndex: number) => number,
-  writeGain: (outIndex: number) => number
+  writeGain: (outIndex: number) => number,
+  cutoff = 1
 ): void {
   for (let j = 0; j < count; j++) {
     const center = sourceAt(from + j);
     const window = readSource(center);
     void channelIndex;
     void windowSource;
-    out[j] = resampleWindow(center, window) * fade(from + j) * writeGain(from + j);
+    out[j] = resampleWindow(center, window, cutoff) * fade(from + j) * writeGain(from + j);
   }
 }
 

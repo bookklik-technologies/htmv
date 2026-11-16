@@ -46,6 +46,18 @@ await build({
   entryPoints: [join(root, 'packages/htmv/src/auto.ts')],
   outfile: join(output, 'auto.js')
 });
+await build({
+  ...common,
+  alias,
+  external: Object.keys(manifest.dependencies),
+  entryPoints: [join(root, 'packages/htmv/src/senangstart.ts')],
+  outfile: join(output, 'senangstart.js')
+});
+const senangLicenses = await Promise.all(['senangstart-icons', 'senangstart-shapes'].map(async (name) => {
+  const license = await readFile(join(root, 'node_modules/@bookklik', name, 'LICENSE.md'), 'utf8');
+  return `@bookklik/${name}\n\n${license}`;
+}));
+await writeFile(join(output, 'senangstart.LICENSE.txt'), senangLicenses.join('\n\n---\n\n'));
 
 async function copyDeclarations(directory, destination) {
   await mkdir(destination, { recursive: true });
@@ -85,6 +97,16 @@ try {
   await declarations.close();
 }
 await writeFile(join(output, 'auto.d.ts'), 'export {};\n');
+const creativeDeclarations = await rollup({
+  input: join(output, 'types/htmv/senangstart.d.ts'),
+  external: Object.keys(manifest.dependencies),
+  plugins: [dts({ respectExternal: true })]
+});
+try {
+  await creativeDeclarations.write({ file: join(output, 'senangstart.d.ts'), format: 'es' });
+} finally {
+  await creativeDeclarations.close();
+}
 const typeOutput = join(output, 'types');
 if (dirname(typeOutput) !== output) throw new Error('Declaration staging must stay inside dist.');
 await rm(typeOutput, { recursive: true, force: true });

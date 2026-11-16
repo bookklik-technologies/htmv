@@ -15,7 +15,6 @@ import {
 } from '@htmv/core';
 import type { CompositionIR, AssetDescriptor as CoreAssetDescriptor } from '@htmv/core';
 import { CNode, parseHtml, sanitizeDocument } from './parse.js';
-import { VISUAL_CONTAINERS, TEXT_LEAVES, IMAGE_ELEMENTS, ENUMERATED_BOOLEAN } from './grammar.js';
 import { ExpansionContext, collectDeclarations, expandNode, DEFAULT_LIMITS, ExpansionLimits } from './expand.js';
 import { resolveBindingPath, parseBindingPath, BindingScope } from './bindings.js';
 import { validateSchemaSubset } from './schema.js';
@@ -28,6 +27,7 @@ import { lowerToIR, finalizeRevisionHash } from './ir.js';
 import { Hasher } from './hash.js';
 import { getRegisteredPlugin, HtmvPlugin } from '@htmv/plugins';
 import { svgImage } from './svg.js';
+import { validatePortableFonts } from './fonts.js';
 
 export interface CompileOptions {
   baseURL?: string;
@@ -113,6 +113,10 @@ export class CompiledCompositionImpl {
 }
 
 export async function compile(source: string | CNode | HTMLElement | HTMLTemplateElement, options: CompileOptions = {}): Promise<CompiledCompositionImpl> {
+  const limits = { ...DEFAULT_LIMITS, ...options.limits };
+  if (!Number.isSafeInteger(limits.maxDepth) || limits.maxDepth < 1 || limits.maxDepth > 256 || !Number.isSafeInteger(limits.maxNodes) || limits.maxNodes < 1) {
+    throw new CompilationError([error('E_RESOURCE_LIMIT', 'maxDepth must be an integer from 1 to 256; maxNodes must be a positive safe integer.')]);
+  }
   let resourcePolicy: Readonly<ResourcePolicy>;
   try { resourcePolicy = resolveResourcePolicy(options.resourcePolicy); }
   catch (e) { throw new CompilationError([e as Diagnostic]); }
@@ -209,7 +213,7 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
   const seed = comp.attributes['seed'] ?? '0';
 
   // ---- Stage 3: props/schema/defaults -----------------------------------
-  const ctx = new ExpansionContext(options.props ?? {}, { ...DEFAULT_LIMITS, ...options.limits });
+  const ctx = new ExpansionContext(options.props ?? {}, limits);
   const decls = collectDeclarations(comp, ctx);
   let rootProps: JsonObject = {};
   if (decls.propsBlock) {
@@ -303,13 +307,7 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
         diagnostics.push(error('E_ASSET', 'Font assets require a family.', { attribute: 'family' }));
         continue;
       }
-      const baseURL = options.baseURL ?? (typeof location !== 'undefined' ? location.href : undefined);
-      let absolute = src;
-      if (!/^(asset:|data:|blob:|https?:)/i.test(src) && baseURL) {
-        absolute = new URL(src, baseURL).href;
-      } else if (/^\//.test(src) && baseURL) {
-        absolute = new URL(src, baseURL).href;
-      }
+      const absolute = resolveAssetURL(src, options.baseURL);
       const descriptor: CoreAssetDescriptor = {
         id,
         kind: kind as CoreAssetDescriptor['kind'],
@@ -319,9 +317,6 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
         fontStyle: assetEl.attributes['font-style'],
         integrity: assetEl.attributes['integrity']
       };
-      if (kind === 'font' && options.fontPolicy === 'portable' && !options.assets?.[id]) {
-        // portable mode requires pinned font bytes — declarations are pinned here
-      }
       assetDeclarations.push(descriptor);
       // Reserve programmatic assets: local file blobs override declarations (spec 7.5)
       resolvedAssets.set(id, await loadAsset(descriptor, options.assets?.[id]));
@@ -340,8 +335,7 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
       if (!resolvedAssets.has(id)) diagnostics.push(error('E_ASSET_FETCH', `Asset ${id} is not declared or supplied.`));
     } else if (kind && node.attributes.src) {
       const id = `hv-inline-asset-${assetDeclarations.length}`;
-      const base = options.baseURL ?? (typeof location !== 'undefined' ? location.href : undefined);
-      const descriptor: CoreAssetDescriptor = { id, kind, src: base ? new URL(node.attributes.src, base).href : node.attributes.src };
+      const descriptor: CoreAssetDescriptor = { id, kind, src: resolveAssetURL(node.attributes.src, options.baseURL) };
       assetDeclarations.push(descriptor);
       resolvedAssets.set(id, await loadAsset(descriptor));
       node.attributes.src = `asset:${id}`;
@@ -361,7 +355,7 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
       if (src.startsWith('asset:')) {
         const id = src.slice('asset:'.length);
         const r = resolvedAssets.get(id);
-        if (r) return { videoExtent: r.videoExtent, audioExtent: r.audioExtent };
+        if (r && (kind === 'video' ? r.videoExtent : r.audioExtent) !== undefined) return { videoExtent: r.videoExtent, audioExtent: r.audioExtent };
       }
       return mediaExtents.getExtent(src, kind);
     }
@@ -392,6 +386,7 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
         : error('E_STYLE_UNSUPPORTED', `${d.message} (selector "${d.selector}")`)
     );
   }
+  if (options.fontPolicy === 'portable') diagnostics.push(...validatePortableFonts(resolver.nodes, styles.rules, assetDeclarations, resolvedAssets));
 
   const backgroundAssets = new Map<string, string>();
   const freezeBackground = async (value: string): Promise<string> => {
@@ -408,8 +403,7 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
       let id = backgroundAssets.get(src);
       if (!id) {
         id = `hv-background-${assetDeclarations.length}`;
-        const base = options.baseURL ?? (typeof location !== 'undefined' ? location.href : undefined);
-        const descriptor: CoreAssetDescriptor = { id, kind: 'image', src: base ? new URL(src, base).href : src };
+        const descriptor: CoreAssetDescriptor = { id, kind: 'image', src: resolveAssetURL(src, options.baseURL) };
         assetDeclarations.push(descriptor); backgroundAssets.set(src, id);
         resolvedAssets.set(id, await loadAsset(descriptor));
       }
@@ -507,6 +501,17 @@ export async function compile(source: string | CNode | HTMLElement | HTMLTemplat
       h = base;
     }
     return h;
+  }
+}
+
+function resolveAssetURL(src: string, baseURL?: string): string {
+  try {
+    const base = baseURL ?? (typeof location !== 'undefined' ? location.href : undefined);
+    const url = new URL(src, base ?? 'https://htmv.invalid/');
+    if (!['http:', 'https:', 'data:', 'blob:', 'asset:'].includes(url.protocol)) throw new Error(`Unsupported resource scheme ${url.protocol}`);
+    return base || /^[a-z][a-z\d+.-]*:/i.test(src.trim()) ? url.href : src;
+  } catch (cause) {
+    throw new CompilationError([error('E_ASSET_URL', `Invalid asset URL "${src}": ${(cause as Error).message}`, { attribute: 'src' })]);
   }
 }
 

@@ -2,6 +2,7 @@
 import { ResolvedNode, TimingResult, parseInlineStyle, validateStylesheet, resolveCssAssetUrls } from '@htmv/compiler';
 import { RESET_CSS, LayoutBox, applyAdmittedDeclarations, collectComputedStyle } from './layoutDoc.js';
 import { layoutText, getMeasureContext, canvasFontString } from './textLayout.js';
+import { CompilationError, error } from '@htmv/core';
 
 export interface SnapshotOptions {
   width: number; height: number; background: string; cssText: string; rootFontPx: number;
@@ -32,12 +33,26 @@ export class LayoutSession {
 }
 
 export function buildLayoutDom(session: LayoutSession, timing: TimingResult, options: SnapshotOptions): { doc: Document; boxes: LayoutBox[] } {
+  const prepared = prepareLayoutDom(session, timing, options);
+  void prepared.doc.body.offsetHeight;
+  if (prepared.doc.fonts.status === 'loading') throw new CompilationError([error('E_TEXT_LAYOUT', 'Fonts are still loading; await buildLayoutDomAsync before measuring.')]);
+  return prepared.capture();
+}
+
+export async function buildLayoutDomAsync(session: LayoutSession, timing: TimingResult, options: SnapshotOptions): Promise<{ doc: Document; boxes: LayoutBox[] }> {
+  const prepared = prepareLayoutDom(session, timing, options);
+  void prepared.doc.body.offsetHeight;
+  await prepared.doc.fonts.ready;
+  return prepared.capture();
+}
+
+function prepareLayoutDom(session: LayoutSession, timing: TimingResult, options: SnapshotOptions): { doc: Document; capture(): { doc: Document; boxes: LayoutBox[] } } {
   const doc = session.ensureDocument(options.width, options.height);
   doc.body.replaceChildren(); doc.head.querySelector('[data-hv-author]')?.remove();
   const style = doc.createElement('style'); style.setAttribute('data-hv-author', ''); style.textContent = options.cssText; doc.head.appendChild(style);
   const root = [...timing.nodes.values()].find((n) => n.kind === 'composition');
   const boxes: LayoutBox[] = [];
-  if (!root) return { doc, boxes };
+  if (!root) return { doc, capture: () => ({ doc, boxes }) };
   const elements = new Map<string, HTMLElement>();
   const mount = (node: ResolvedNode, parent: HTMLElement): void => {
     if (node.kind === 'audio' || node.kind === 'declaration') return;
@@ -74,6 +89,7 @@ export function buildLayoutDom(session: LayoutSession, timing: TimingResult, opt
     for (const id of node.childIds) { const child = timing.nodes.get(id); if (child) mount(child, el); }
   };
   mount(root, doc.body);
+  return { doc, capture: () => {
   const rules = validateStylesheet(options.cssText).rules;
   const matrices = new Map<string, { fn: string; args: number[] }[]>();
   const origins = new Map<string, [number, number]>();
@@ -137,9 +153,11 @@ export function buildLayoutDom(session: LayoutSession, timing: TimingResult, opt
     for (const cid of node.childIds) { const child = timing.nodes.get(cid); if (child) capture(child, box); }
   };
   capture(root, null); return { doc, boxes };
+  } };
 }
 
 export function parseTransformFunctions(transform: string): { fn: string; args: number[] }[] {
+  if (/matrix3d\s*\(/i.test(transform)) throw new CompilationError([error('E_STYLE_UNSUPPORTED', '3D transforms are not supported by the canvas renderer.')]);
   const out: { fn: string; args: number[] }[] = []; const re = /(translate|translateX|translateY|rotate|scale|scaleX|scaleY|skew|skewX|skewY|matrix)\(([^)]*)\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(transform))) out.push({ fn: m[1], args: m[2].split(/[ ,]+/).filter(Boolean).map(Number.parseFloat) });

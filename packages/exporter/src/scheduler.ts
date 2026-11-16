@@ -3,13 +3,13 @@
  * Merged A/V schedule: advance the next-smallest output timestamp; await
  * writer/encoder capacity; never drop output frames; bounded queues.
  */
-import { Rational, Diagnostic, FrameRange } from '@htmv/core';
+import { Rational, Diagnostic, FrameRange, error } from '@htmv/core';
 import type { CompiledCompositionImpl } from '@htmv/compiler';
 import { RendererSession } from './session.js';
 import { Evaluation } from '@htmv/renderer-canvas';
 import { MediabunnyMuxer, MuxerPlan, getMediabunnyAdapter } from '@htmv/media-mediabunny';
-import { createWriterSession, WriterSession, writerQuotaError } from './writers.js';
-import { ExportConfiguration, OutputTarget, ExportResult, RenderProgress, RenderManifest, DEFAULT_MEMORY_ADMISSION_BYTES } from './types.js';
+import { createWriterSession, WriterSession, WriterResult, writerQuotaError, toExportDiagnostic } from './writers.js';
+import { ExportConfiguration, OutputTarget, ExportResult, RenderProgress, DEFAULT_MEMORY_ADMISSION_BYTES } from './types.js';
 import { buildManifest } from './manifest.js';
 import { transitionGains } from '@htmv/audio';
 
@@ -34,7 +34,7 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
   const toExclusive = configuration.range.toExclusive;
   const N = composition.metadata.durationFrames;
   if (!(Number.isInteger(from) && Number.isInteger(toExclusive) && 0 <= from && from < toExclusive && toExclusive <= N)) {
-    throw new Error(`Invalid export range [${from}, ${toExclusive}); must satisfy 0 <= from < toExclusive <= ${N}.`);
+    throw error('E_TIME_UNIT', `Invalid export range [${from}, ${toExclusive}); must satisfy 0 <= from < toExclusive <= ${N}.`);
   }
   const a = Rational.fromInteger(BigInt(from)).div(fps);
   const e = Rational.fromInteger(BigInt(toExclusive)).div(fps);
@@ -44,7 +44,7 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
   const sampleRate = composition.metadata.sampleRate;
   const totalSamples = configuration.audio ? D.mul(Rational.fromInteger(BigInt(sampleRate))).ceil().num : 0n;
   const estimate = Math.ceil((configuration.video.bitrate + (configuration.audio?.bitrate ?? 0)) * D.toNumber() / 8);
-  if (target.kind === 'memory' && estimate > (target.maxBytes ?? DEFAULT_MEMORY_ADMISSION_BYTES)) throw new Error('E_RESOURCE_LIMIT: estimated output exceeds the memory target admission limit; select a streaming target.');
+  if (target.kind === 'memory' && estimate > (target.maxBytes ?? DEFAULT_MEMORY_ADMISSION_BYTES)) throw error('E_RESOURCE_LIMIT', 'Estimated output exceeds the memory target admission limit; select a streaming target.');
 
   const warnings: string[] = [];
   if (configuration.syncCertification === 'unverified') warnings.push('E_AUDIO_DELAY_UNVERIFIED: encoded synchronization is not certified in this environment.');
@@ -78,6 +78,9 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
 
   let completedFrames = 0;
   let mixedSamples = 0;
+  let clippedSamples = 0;
+  let clippingPeak = 0;
+  let writerFinished = false;
   let aborted = false;
   const onAbort = () => {
     aborted = true;
@@ -85,10 +88,10 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
   signal?.addEventListener('abort', onAbort, { once: true });
 
   try {
-    writer = await createWriterSession(target);
+    try { writer = await createWriterSession(target); } catch (failure) { throw writerFailure(failure); }
     muxPlan.destination = { appendOnly: target.kind === 'append-only', write: async (position, bytes) => {
       if (signal?.aborted) throw new DOMException('Export aborted', 'AbortError');
-      await writer!.write(position, bytes);
+      try { await writer!.write(position, bytes); } catch (failure) { throw writerFailure(failure); }
     } };
     muxer = getMediabunnyAdapter().createMuxer(muxPlan);
 
@@ -98,7 +101,7 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
     let guard = 0;
 
     while (videoIndex < totalFrames || audioIndex < Number(totalSamples)) {
-      if (guard++ > (totalFrames + 1000000) * 4) throw new Error('E_RESOURCE_LIMIT: export scheduling did not terminate.');
+      if (guard++ > (totalFrames + 1000000) * 4) throw error('E_RESOURCE_LIMIT', 'Export scheduling did not terminate.');
       if (aborted || signal?.aborted) {
         throw new DOMException('Export aborted', 'AbortError');
       }
@@ -130,9 +133,8 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
         await muxer.addAudioBlock(block.left, block.right, sampleUs(audioIndex, sampleRate));
         mixedSamples += count;
         audioIndex += count;
-        if (block.clippedSamples > 0 && !warnings.includes('W_AUDIO_CLIPPING')) {
-          warnings.push(`W_AUDIO_CLIPPING: ${block.clippedSamples} sample(s) hit the final hard clamp; peak ${block.peak.toFixed(4)}.`);
-        }
+        clippedSamples += block.clippedSamples;
+        clippingPeak = Math.max(clippingPeak, block.peak);
         callbacks?.onProgress?.(progress('mixing', completedFrames, totalFrames, mixedSamples, Number(totalSamples)));
       } else break;
     }
@@ -143,6 +145,7 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
     await muxer.finish();
     if (signal?.aborted) throw new DOMException('Export aborted', 'AbortError');
     const position = writer.bytesWritten();
+    if (clippedSamples > 0) warnings.push(`W_AUDIO_CLIPPING: ${clippedSamples} sample(s) hit the final hard clamp; peak ${clippingPeak.toFixed(4)}.`);
     const manifest = buildManifest({
       metadata: {
         id: composition.metadata.id,
@@ -171,8 +174,10 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
       highWaterMarks: { ...highWater, ...session.resourceMeasurements() },
       status: 'complete'
     });
-    const result = await writer.finish();
-    callbacks?.onProgress?.({
+    let result: WriterResult;
+    try { result = await writer.finish(); } catch (failure) { throw writerFailure(failure); }
+    writerFinished = true;
+    try { callbacks?.onProgress?.({
       phase: 'finalizing',
       completedFrames,
       totalFrames,
@@ -180,31 +185,36 @@ export async function exportRange(deps: SchedulerDeps, callbacks?: { onProgress?
       totalSamples: Number(totalSamples),
       bytesWritten: Number(position),
       estimatedRemainingSeconds: 0
-    });
+    }); } catch {}
     if (result.kind === 'blob') {
       // label the blob with the selected container MIME (spec 13.3)
-      return { kind: 'blob', blob: new Blob([result.blob], { type: muxer.mimeType }), manifest: applyManifest(result.manifest, manifest) };
+      return { kind: 'blob', blob: new Blob([result.blob], { type: muxer.mimeType }), manifest };
     }
     if (result.kind === 'opfs') {
-      return { kind: 'opfs', file: result.file, cleanup: result.cleanup, manifest: applyManifest(result.manifest, manifest) };
+      return { kind: 'opfs', file: result.file, cleanup: result.cleanup, manifest };
     }
     return { kind: 'file', bytesWritten: Number(position), manifest };
   } catch (err) {
-    await muxer?.cancel();
-    try { await writer?.abort((err as Error).message); } catch { /* preserve original failure */ }
-    const d: Diagnostic = writerQuotaError(err);
-    if ((err as Error).name === 'AbortError') {
+    const diagnostic = toExportDiagnostic(err, 'E_CODEC_ENCODE');
+    if (!writerFinished) {
+      try { await muxer?.cancel(); } catch {}
+      try { await writer?.abort(diagnostic.message); } catch { /* preserve original failure */ }
+    }
+    if (isAbortError(err)) {
       throw err; // aborted state, not a success-shaped partial file (spec 11.5)
     }
-    void d;
-    throw err;
+    throw diagnostic;
   } finally {
     signal?.removeEventListener('abort', onAbort);
   }
 }
 
-function applyManifest(_original: RenderManifest, filled: RenderManifest): RenderManifest {
-  return filled;
+function isAbortError(reason: unknown): boolean {
+  return reason !== null && typeof reason === 'object' && 'name' in reason && reason.name === 'AbortError';
+}
+
+function writerFailure(reason: unknown): unknown {
+  return isAbortError(reason) ? reason : writerQuotaError(reason);
 }
 
 function endpointUs(n: number, fps: Rational): bigint {

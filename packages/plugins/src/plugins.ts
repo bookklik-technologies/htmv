@@ -71,7 +71,7 @@ export function listRegisteredPlugins(): { id: string; version: string }[] {
 /**
  * Plugin canvas leaves: `data-hv-plugin="registered-id"` with optional inert
  * JSON `data-hv-plugin-props` and explicit logical width/height (spec 14.1).
- * Unregistered canvas is rejected. Engine save/restore protects painter state;
+ * Unregistered canvas is rejected. A private surface protects painter state;
  * frame readiness awaits async render completion — timeout is an error.
  */
 export const PLUGIN_TIMEOUT_MS = 5000;
@@ -80,11 +80,37 @@ export async function renderPluginLeaf(
   plugin: PreparedPlugin,
   context: PluginFrameContext
 ): Promise<void> {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`Plugin exceeded its ${PLUGIN_TIMEOUT_MS}ms render budget.`)), PLUGIN_TIMEOUT_MS);
+  if (context.signal.aborted) throw new DOMException('Plugin render aborted', 'AbortError');
+  const surface = typeof OffscreenCanvas !== 'undefined'
+    ? new OffscreenCanvas(context.width, context.height)
+    : (context.ctx.canvas as HTMLCanvasElement).ownerDocument.createElement('canvas');
+  surface.width = context.width; surface.height = context.height;
+  const ctx = surface.getContext('2d') as PluginFrameContext['ctx'] | null;
+  if (!ctx) { surface.width = surface.height = 0; throw new Error('Plugin rendering requires a 2D context.'); }
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort!: () => void;
+  const interrupted = new Promise<never>((_, reject) => {
+    abort = () => { controller.abort(); reject(new DOMException('Plugin render aborted', 'AbortError')); };
+    context.signal.addEventListener('abort', abort, { once: true });
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Plugin exceeded its ${PLUGIN_TIMEOUT_MS}ms render budget.`));
+    }, PLUGIN_TIMEOUT_MS);
   });
-  context.ctx.save();
-  try { await Promise.race([Promise.resolve().then(() => plugin.render(context)), timeout]); }
-  finally { clearTimeout(timer!); context.ctx.restore(); }
+  const rendering = Promise.resolve().then(() => {
+      if (controller.signal.aborted) throw new DOMException('Plugin render aborted', 'AbortError');
+      return plugin.render({ ...context, ctx, signal: controller.signal });
+  });
+  try {
+    await Promise.race([rendering, interrupted]);
+    if (context.signal.aborted || controller.signal.aborted) throw new DOMException('Plugin render aborted', 'AbortError');
+    context.ctx.save();
+    try { context.ctx.drawImage(surface, 0, 0); }
+    finally { context.ctx.restore(); }
+  } finally {
+    clearTimeout(timer); context.signal.removeEventListener('abort', abort);
+    controller.abort(); surface.width = surface.height = 0;
+    void rendering.then(() => { surface.width = surface.height = 0; }, () => { surface.width = surface.height = 0; });
+  }
 }

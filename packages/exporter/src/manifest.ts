@@ -8,7 +8,8 @@ import { Rational } from '@htmv/core';
 import { Hasher } from '@htmv/compiler';
 import { ADAPTER_VERSION, ADAPTER_NAME } from '@htmv/media-mediabunny';
 
-export const LIBRARY_VERSION = '0.1.0';
+export { LIBRARY_VERSION } from './version.js';
+import { LIBRARY_VERSION } from './version.js';
 export const LANGUAGE_VERSION = 'htmv-language-1';
 
 export interface ManifestInput {

@@ -1,5 +1,5 @@
 /**
- * Canonical bounded-block Float32 PCM mixer (spec 10.1–10.3, 10.6).
+ * Whole-output Float32 PCM convenience mixer with bounded Float64 scratch blocks.
  * - M = ceil(T*R) output samples; sample j represents time j/R.
  * - Per-node bounds: ceil(b*R) .. ceil(e*R), clipped to [0, M).
  * - Float64 accumulation, stable node-ID order, one final hard clip with report.
@@ -59,6 +59,9 @@ export function mixOffline(
   gainAt: (nodeId: string, rootTimeSeconds: number) => number,
   events?: MixEvents
 ): MixDestination {
+  if (totalSamples < 0n || totalSamples > BigInt(Number.MAX_SAFE_INTEGER) || !Number.isSafeInteger(sampleRate) || sampleRate <= 0) {
+    throw new RangeError('Mix sample count must be nonnegative and safe; sample rate must be a positive safe integer.');
+  }
   const M = Number(totalSamples);
   const left = new Float32Array(M);
   const right = channels === 2 ? new Float32Array(M) : left;
@@ -68,52 +71,44 @@ export function mixOffline(
   let peak = 0;
   let clipped = 0;
 
-  for (const node of sorted) {
-    const start = clampIndex(node.intervalStart.mul(Rational.fromDecimalString(String(sampleRate))).ceil().num, 0n, BigInt(M));
-    const end = clampIndex(node.intervalEnd.mul(Rational.fromDecimalString(String(sampleRate))).ceil().num, 0n, BigInt(M));
-    if (end <= start || !node.source) continue;
-    const scratchL = new Float32Array(BLOCK);
-    const scratchR = channels === 2 ? new Float32Array(BLOCK) : scratchL;
-    const outL = new Float32Array(BLOCK);
-    const outR = channels === 2 ? new Float32Array(BLOCK) : outL;
-    for (let pos = Number(start); pos < Number(end); ) {
-      const count = Math.min(BLOCK, Number(end) - pos);
-      // canonical PCM from the node source; rate mapping handled by the adapter layer
-      node.source.fill(channels === 2 ? [scratchL, scratchR] : [scratchL], pos, count, sampleRate);
-      // per-sample gain: root time first, then mapped clocks (spec 10.6)
-      const dt = 1 / sampleRate;
-      for (let j = 0; j < count; j++) {
-        const rootTime = (pos + j) * dt;
-        const g = clampGain(gainAt(node.nodeId, rootTime)) * clampGain(node.baseGain);
-        outL[j] = scratchL[j] * g;
-        if (channels === 2) outR[j] = scratchR[j] * g;
+  const bounds = sorted.map((node) => ({
+    node,
+    start: Number(clampIndex(ceilMulR(node.intervalStart, sampleRate), 0n, totalSamples)),
+    end: Number(clampIndex(ceilMulR(node.intervalEnd, sampleRate), 0n, totalSamples))
+  }));
+  const scratchLeft = new Float32Array(BLOCK);
+  const scratchRight = channels === 2 ? new Float32Array(BLOCK) : scratchLeft;
+  const accumulatedLeft = new Float64Array(BLOCK);
+  const accumulatedRight = channels === 2 ? new Float64Array(BLOCK) : accumulatedLeft;
+  for (let blockStart = 0; blockStart < M; blockStart += BLOCK) {
+    const count = Math.min(BLOCK, M - blockStart);
+    accumulatedLeft.fill(0);
+    if (channels === 2) accumulatedRight.fill(0);
+    for (const { node, start, end } of bounds) {
+      const from = Math.max(start, blockStart);
+      const to = Math.min(end, blockStart + count);
+      if (to <= from || !node.source) continue;
+      scratchLeft.fill(0);
+      if (channels === 2) scratchRight.fill(0);
+      node.source.fill(channels === 2 ? [scratchLeft, scratchRight] : [scratchLeft], from, to - from, sampleRate);
+      for (let offset = 0; offset < to - from; offset++) {
+        const gain = clampGain(gainAt(node.nodeId, (from + offset) / sampleRate)) * clampGain(node.baseGain);
+        const target = from - blockStart + offset;
+        accumulatedLeft[target] += scratchLeft[offset] * gain;
+        if (channels === 2) accumulatedRight[target] += scratchRight[offset] * gain;
       }
-      for (let j = 0; j < count; j++) {
-        const l = outL[j];
-        const r = channels === 2 ? outR[j] : l;
-        left[pos + j] += l;
-        if (channels === 2) right[pos + j] += r;
-      }
-      pos += count;
     }
-  }
-
-  // Float64 accumulation path: JS numbers already accumulate in doubles here (left[] accumulations).
-  // Final hard clip to [-1,1] with statistics (spec 10.3)
-  for (let j = 0; j < M; j++) {
-    const l = clampSample(left[j]);
-    if (l !== left[j]) clipped++;
-    left[j] = l;
-    let r = l;
-    if (channels === 2) {
-      r = clampSample(right[j]);
-      if (r !== right[j]) clipped++;
-      right[j] = r;
+    for (let offset = 0; offset < count; offset++) {
+      const mixedLeft = accumulatedLeft[offset];
+      const mixedRight = accumulatedRight[offset];
+      const finalLeft = clampSample(mixedLeft);
+      const finalRight = clampSample(mixedRight);
+      if (finalLeft !== mixedLeft) clipped++;
+      if (channels === 2 && finalRight !== mixedRight) clipped++;
+      left[blockStart + offset] = finalLeft;
+      if (channels === 2) right[blockStart + offset] = finalRight;
+      peak = Math.max(peak, Math.abs(finalLeft), Math.abs(finalRight));
     }
-    const pl = Math.abs(l);
-    const pr = Math.abs(r);
-    if (pl > peak) peak = pl;
-    if (pr > peak) peak = pr;
   }
   events?.onClipping?.(peak, clipped);
   return { left, right, sampleRate, totalSamples: M, peak, clippedSamples: clipped };
@@ -122,7 +117,9 @@ export function mixOffline(
 export function clampGain(g: number): number {
   if (!Number.isFinite(g)) return 0;
   return Math.min(4, Math.max(0, g));
-}function clampSample(v: number): number {
+}
+
+function clampSample(v: number): number {
   return v > 1 ? 1 : v < -1 ? -1 : v;
 }
 
@@ -138,4 +135,3 @@ export function transitionGains(p: number): { gOut: number; gIn: number } {
   const q = Math.max(0, Math.min(1, p));
   return { gOut: Math.cos((q * Math.PI) / 2), gIn: Math.sin((q * Math.PI) / 2) };
 }
-

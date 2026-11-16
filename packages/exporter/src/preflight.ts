@@ -57,6 +57,10 @@ export async function runPreflight(req: PreflightInput): Promise<CapabilityRepor
   }
 
   const profiles = candidatesFor(req);
+  if (profiles.length === 0) {
+    diagnostics.push(error('E_CODEC_ENCODE', 'No export profiles remain after applying allowedProfiles.'));
+    return { supported: false, candidates: [], diagnostics, estimatedBytes: 0 };
+  }
   const reports: ExportCandidateReport[] = [];
   const videoBitrate = req.videoBitrate ?? DEFAULTS.videoBitrate;
   const videoReq: VideoProbeRequest = {
@@ -84,6 +88,7 @@ export async function runPreflight(req: PreflightInput): Promise<CapabilityRepor
 
     let audioCodec: 'aac' | 'opus' | null = null;
     let aOk: boolean | null = null;
+    let aDiag: Diagnostic | null = null;
     if (req.hasAudio) {
       const want = profile === 'mp4' ? 'aac' : 'opus';
       const aReq: AudioProbeRequest = {
@@ -97,7 +102,7 @@ export async function runPreflight(req: PreflightInput): Promise<CapabilityRepor
         audioCodec = want;
       } else {
         aOk = null; // will be a blocking error below (spec 11.2: missing audio encoding is blocking)
-        vDiag = vDiag ?? error('E_CODEC_ENCODE', `Requested audio encoding (${want}) is unavailable; missing audio is a blocking error, not permission to drop sound.`);
+        aDiag = error('E_CODEC_ENCODE', `Requested audio encoding (${want}) is unavailable; missing audio is a blocking error, not permission to drop sound.`);
       }
     } else {
       aOk = null;
@@ -106,6 +111,7 @@ export async function runPreflight(req: PreflightInput): Promise<CapabilityRepor
 
     const profileDiags: Diagnostic[] = [];
     if (vDiag) profileDiags.push(vDiag);
+    if (aDiag) profileDiags.push(aDiag);
     reports.push({
       profile,
       mimeType: profile === 'mp4' ? 'video/mp4' : 'video/webm',
@@ -118,15 +124,29 @@ export async function runPreflight(req: PreflightInput): Promise<CapabilityRepor
     });
   }
 
-  const firstGood = reports.find((r) => r.videoCodecSupported && (!req.hasAudio || r.audioCodecSupported));
-  const isCertified = !req.hasAudio || !!firstGood && certifiedProfiles().has(firstGood.profile);
+  const supported = reports.filter((report) => report.videoCodecSupported && (!req.hasAudio || report.audioCodecSupported));
+  const rangeSeconds = Number(req.range.toExclusive - req.range.from) / req.fps.toNumber();
+  const certificationFor = (report: ExportCandidateReport): boolean => (certified.get(certificationKey({
+    profile: report.profile,
+    videoCodec: report.videoCodec,
+    width: req.width,
+    height: req.height,
+    fps: { numerator: Number(req.fps.num), denominator: Number(req.fps.den) },
+    videoBitrate,
+    audioCodec: report.audioCodec!,
+    sampleRate: req.audio?.sampleRate ?? 48000,
+    channels: req.audio?.channels ?? 2,
+    audioBitrate: req.audioBitrate ?? (report.audioCodec === 'aac' ? DEFAULTS.aacKbps * 1000 : DEFAULTS.opusKbps * 1000)
+  }))?.durationSeconds ?? 0) >= rangeSeconds;
+  const firstGood = (req.hasAudio ? supported.find(certificationFor) : undefined) ?? supported[0];
+  const isCertified = !req.hasAudio || !!firstGood && certificationFor(firstGood);
   const syncCertification: ExportConfiguration['syncCertification'] = isCertified ? 'certified' : 'unverified';
   const strictSyncFailure = !isCertified && req.syncPolicy !== 'allow-unverified';
-  if (!isCertified) {
+  if (firstGood && !isCertified) {
     // Strict-sync gate (spec 10.4): a caller may explicitly accept unverified output.
     diagnostics.push(
       (strictSyncFailure ? error : warning)('E_AUDIO_DELAY_UNVERIFIED', `Profile "${req.requested}" has no certified codec-delay result in this environment.`, {
-        suggestion: 'Run the impulse/flash fixture certification, or pass syncPolicy "allow-unverified" to accept a documented non-certified output warning.'
+        suggestion: 'Register independently measured impulse/flash evidence with certifyProfile(configuration, evidence), or pass syncPolicy "allow-unverified" to accept non-certified output.'
       })
     );
   }
@@ -164,7 +184,6 @@ export async function runPreflight(req: PreflightInput): Promise<CapabilityRepor
   if (!firstGood) diagnostics.push(...reports.flatMap((r) => r.diagnostics));
 
   // rough byte estimate: bitrate * duration + audio
-  const rangeSeconds = Number(req.range.toExclusive - req.range.from) / req.fps.toNumber();
   const estimatedBytes = Math.ceil(((videoBitrate + (selected?.audio?.bitrate ?? 0)) / 8) * rangeSeconds);
 
   return {
@@ -176,17 +195,66 @@ export async function runPreflight(req: PreflightInput): Promise<CapabilityRepor
   };
 }
 
-/**
- * Certified profile set: populated by the M6 impulse/flash fixture results per
- * environment; empty here means no profile is certified in this browser build.
- * Output must never claim frame-accurate sync without a run certification (spec 10.4).
- */
-const certified = new Set<string>();
-export function certifiedProfiles(): ReadonlySet<string> {
-  return certified;
+export interface AudioSyncEvidence {
+  fixtureId: string;
+  measuredOffsetSeconds: number;
+  measuredDriftSeconds: number;
+  durationSeconds: number;
+  toleranceSeconds: number;
 }
-export function certifyProfile(profile: string): void {
-  certified.add(profile);
+
+interface CertificationConfiguration {
+  profile: string;
+  videoCodec: string;
+  width: number;
+  height: number;
+  fps: { numerator: number; denominator: number };
+  videoBitrate: number;
+  audioCodec: string;
+  sampleRate: number;
+  channels: number;
+  audioBitrate: number;
+}
+
+const certified = new Map<string, Readonly<AudioSyncEvidence>>();
+export function certifiedProfiles(): ReadonlySet<string> {
+  return new Set([...certified.keys()].map((key) => JSON.parse(key)[1] as string));
+}
+export function certifyProfile(configuration: ExportConfiguration, evidence: AudioSyncEvidence): void {
+  if (!configuration.audio) throw error('E_AUDIO_DELAY_UNVERIFIED', 'Audio sync certification requires an audio configuration.');
+  const frameSeconds = configuration.fps.denominator / configuration.fps.numerator;
+  if (!evidence.fixtureId.trim() || !Number.isFinite(frameSeconds) || frameSeconds <= 0 ||
+      ![evidence.measuredOffsetSeconds, evidence.measuredDriftSeconds, evidence.durationSeconds, evidence.toleranceSeconds].every(Number.isFinite) ||
+      evidence.durationSeconds <= 0 || evidence.toleranceSeconds <= 0 || evidence.toleranceSeconds > frameSeconds ||
+      Math.abs(evidence.measuredOffsetSeconds) > evidence.toleranceSeconds || Math.abs(evidence.measuredDriftSeconds) > evidence.toleranceSeconds) {
+    throw error('E_AUDIO_DELAY_UNVERIFIED', 'Sync evidence must include a fixture ID, positive measured duration, and finite offset/drift within a tolerance of at most one output frame.');
+  }
+  certified.set(certificationKey({
+    profile: configuration.profile,
+    videoCodec: configuration.video.codec,
+    width: configuration.width,
+    height: configuration.height,
+    fps: configuration.fps,
+    videoBitrate: configuration.video.bitrate,
+    audioCodec: configuration.audio.codec,
+    sampleRate: configuration.audio.sampleRate,
+    channels: configuration.audio.channels,
+    audioBitrate: configuration.audio.bitrate
+  }), Object.freeze({ ...evidence }));
+}
+
+export function clearProfileCertifications(): void {
+  certified.clear();
+}
+
+function certificationKey(configuration: CertificationConfiguration): string {
+  const fps = Rational.of(BigInt(configuration.fps.numerator), BigInt(configuration.fps.denominator));
+  return JSON.stringify([
+    typeof navigator === 'undefined' ? 'non-browser' : navigator.userAgent,
+    configuration.profile, configuration.videoCodec, configuration.width, configuration.height,
+    fps.toString(), configuration.videoBitrate, configuration.audioCodec, configuration.sampleRate,
+    configuration.channels, configuration.audioBitrate
+  ]);
 }
 
 function makeToken(revisionHash: string, profile: string, range: FrameRange, width: number, height: number): string {

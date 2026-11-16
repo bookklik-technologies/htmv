@@ -78,4 +78,4 @@ Start with `@htmv/htmv`, which exports the public API. The [JavaScript API refer
 
 ## Implementation status
 
-The [implementation status](/implementation-status.md) lists implemented behavior, regression coverage, and remaining release checks. For the formal language and runtime requirements, see [`SPEC.md`](https://github.com/bookklik-technologies/htmv/blob/main/SPEC.md) in the repository.
+The [implementation status](/implementation-status.md) lists implemented behavior, regression coverage, and remaining release checks. The repository's [`SPEC.md`](https://github.com/bookklik-technologies/htmv/blob/main/SPEC.md) is an implementation-derived working contract, not the missing historical revision 1.0. Formal v1 conformance remains unverified.

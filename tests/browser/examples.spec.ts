@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const examples = ['hello', 'data-template', 'edited-story', 'hold-and-loop', 'seeded-plugin', 'product-intro'];
+const examples = ['hello', 'data-template', 'edited-story', 'hold-and-loop', 'seeded-plugin', 'product-intro', 'creative-studio'];
 async function open(page: Page, name: string) {
   await page.goto(`/examples/${name}/index.html`);
   await expect(page.locator('main')).toHaveAttribute('data-ready', 'true');
@@ -16,7 +16,7 @@ async function pixels(page: Page) {
 test('gallery is the server entry and all example posters resolve', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/examples\/index.html$/);
-  await expect(page.locator('.gallery-card')).toHaveCount(6);
+  await expect(page.locator('.gallery-card')).toHaveCount(7);
   for (const image of await page.locator('.gallery-card img').all()) {
     await image.scrollIntoViewIfNeeded();
     await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
@@ -44,6 +44,59 @@ for (const example of examples) {
     expect(errors).toEqual([]);
   });
 }
+
+for (const layout of ['quote', 'ticket', 'steps', 'showcase', 'marquee', 'report']) {
+  test(`creative studio renders ${layout} in every format`, async ({ page }) => {
+    test.setTimeout(60000);
+    await open(page, 'creative-studio');
+    for (const format of ['landscape', 'portrait', 'square']) {
+      await page.getByLabel('Composition', { exact: true }).selectOption(layout);
+      await page.getByLabel('Video format').selectOption(format);
+      await page.getByRole('button', { name: 'Apply changes' }).click();
+      await expect(page.locator('main')).toHaveAttribute('aria-busy', 'false');
+      const dimensions = format === 'portrait' ? [720, 1280] : format === 'square' ? [1080, 1080] : [1280, 720];
+      await expect(page.locator('#format')).toContainText(`${dimensions[0]} × ${dimensions[1]}`);
+      await seek(page, 90);
+      await expect(page.locator('hv-player canvas')).toHaveAttribute('width', String(dimensions[0]));
+      await expect(page.locator('hv-player canvas')).toHaveAttribute('height', String(dimensions[1]));
+      await expect(page.locator('#composition-source')).toContainText('id="headline"');
+    }
+  });
+}
+
+test('creative studio switches layouts and formats, preserves revisions on invalid assets, and resets selects', async ({ page }) => {
+  test.setTimeout(120000);
+  await open(page, 'creative-studio');
+  for (const layout of ['editorial', 'poster', 'orbit', 'collage', 'gallery', 'banner']) {
+    for (const format of ['landscape', 'portrait', 'square']) {
+      await page.getByLabel('Composition', { exact: true }).selectOption(layout);
+      await page.getByLabel('Video format').selectOption(format);
+      await page.getByRole('button', { name: 'Apply changes' }).click();
+      await expect(page.locator('main')).toHaveAttribute('aria-busy', 'false');
+      const dimensions = format === 'portrait' ? [720, 1280] : format === 'square' ? [1080, 1080] : [1280, 720];
+      await expect(page.locator('#format')).toContainText(`${dimensions[0]} × ${dimensions[1]}`);
+      await seek(page, 90);
+      await expect(page.locator('hv-player canvas')).toHaveAttribute('width', String(dimensions[0]));
+      await expect(page.locator('hv-player canvas')).toHaveAttribute('height', String(dimensions[1]));
+    }
+  }
+  await page.getByLabel('Shape style').selectOption('duotone');
+  await page.getByRole('button', { name: 'Apply changes' }).click();
+  await expect(page.locator('main')).toHaveAttribute('aria-busy', 'false');
+  const revision = await page.locator('main').getAttribute('data-revision');
+  const source = await page.locator('#composition-source').textContent();
+  await page.getByLabel('SenangStart icon', { exact: false }).fill('not-a-real-icon');
+  await page.getByRole('button', { name: 'Apply changes' }).click();
+  await expect(page.locator('#status')).toContainText('Unknown SenangStart icon');
+  await expect(page.locator('main')).toHaveAttribute('data-revision', revision!);
+  await expect(page.locator('#composition-source')).toHaveText(source!);
+  await page.getByRole('button', { name: 'Reset', exact: true }).click();
+  await expect(page.getByLabel('Composition', { exact: true })).toHaveValue('editorial');
+  await expect(page.getByLabel('Video format')).toHaveValue('landscape');
+  await expect(page.getByLabel('Shape style')).toHaveValue('auto');
+  await expect(page.getByLabel('SenangStart icon', { exact: false })).toHaveValue('sparkles');
+  await expect(page.locator('#format')).toContainText('1280 × 720');
+});
 
 test('hello automatic binding applies and resets headline, including unchanged inputs', async ({ page }) => {
   await open(page, 'hello'); await seek(page, 75); const before = await pixels(page);

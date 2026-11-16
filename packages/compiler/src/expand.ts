@@ -300,7 +300,7 @@ function applyBindings(node: CNode, ctx: ExpansionContext, instancePath: string)
     if (!path || typeof value !== 'string') {
       ctx.diagnostics.push(error('E_BINDING_PATH', `data-hv-src "${attrs['data-hv-src']}" must resolve to a string URL.`));
     } else {
-      if (/^javascript:/i.test(value)) {
+      if (/^(?:javascript|vbscript):/i.test(value.replace(/[\u0000-\u0020\u007f]/g, ''))) {
         ctx.diagnostics.push(error('E_BINDING_URL', `data-hv-src resolved to a disallowed URL scheme.`));
       } else {
         attrs['src'] = value;
@@ -312,10 +312,17 @@ function applyBindings(node: CNode, ctx: ExpansionContext, instancePath: string)
   for (const name of Object.keys(attrs)) {
     if (!name.startsWith('data-hv-attr-')) continue;
     const target = name.slice('data-hv-attr-'.length);
+    if (!target || /^on/i.test(target) || /^(?:style|srcdoc)$/i.test(target) || target.startsWith('data-hv-') || target.startsWith('hv-')) {
+      ctx.diagnostics.push(error('E_BINDING_ATTRIBUTE', `${name} cannot bind executable, style, or compiler-control attributes.`, { attribute: name }));
+      delete attrs[name];
+      continue;
+    }
     const path = parseBindingPath(attrs[name]);
     const value = path ? resolveBindingPath(path, ctx.currentScope()) : undefined;
     if (!path || value === undefined) {
       ctx.diagnostics.push(error('E_BINDING_PATH', `${name} "${attrs[name]}" did not resolve.`));
+    } else if (/^(?:src|href|xlink:href|action|formaction|poster)$/i.test(target) && /^(?:javascript|vbscript):/i.test(String(value).replace(/[\u0000-\u0020\u007f]/g, ''))) {
+      ctx.diagnostics.push(error('E_BINDING_URL', `${name} resolved to a disallowed URL scheme.`, { attribute: name }));
     } else if (target in attrs && target !== name) {
       ctx.diagnostics.push(error('E_BINDING_CONFLICT', `Attribute "${target}" has both an explicit value and a ${name} binding; no hidden precedence rule exists.`));
     } else {

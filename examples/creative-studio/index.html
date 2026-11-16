@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Explore freeform HTMV compositions with SenangStart Icons and Shapes, independent layouts, palettes, and video formats.">
+  <title>Creative studio · HTMV examples</title>
+  <link rel="icon" href="../shared/brand/icon.svg">
+  <link rel="stylesheet" href="../shared/studio.css">
+  <style>
+    .screen canvas { aspect-ratio: auto; }
+    .settings input[type="color"] { height: 42px; padding: 4px; }
+    .palette-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .settings input[list] { min-height: 42px; }
+  </style>
+</head>
+<body>
+  <hv-composition id="creative-studio" width="1280" height="720" fps="30" duration="180f"></hv-composition>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

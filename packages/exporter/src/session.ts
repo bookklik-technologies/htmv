@@ -7,14 +7,14 @@ import { Rational, Diagnostic, error, FrameRange } from '@htmv/core';
 import type { CompiledCompositionImpl } from '@htmv/compiler';
 import { checkImageDimensions, resolveCssAssetUrls } from '@htmv/compiler';
 import type { ResourcePolicy } from '@htmv/compiler';
-import { LayoutSession, buildLayoutDom, LayoutBox } from '@htmv/layout-dom';
-import { evaluateFrame, Evaluation, MediaRequest } from '@htmv/renderer-canvas';
+import { LayoutSession, buildLayoutDom, buildLayoutDomAsync, LayoutBox } from '@htmv/layout-dom';
+import { evaluateFrame, Evaluation, MediaRequest, releasePaintSurfacePool } from '@htmv/renderer-canvas';
 import { paintFrame, indexBoxes, inspectPaintFrame } from './paint.js';
 import { canonicalEasing } from './evaluator.js';
 import type { MediaReader, MediaReaderOpenOptions, MediaInspection, DecodedVideoFrame } from '@htmv/media';
 import { getMediabunnyAdapter, MediabunnyMuxer, MuxerPlan } from '@htmv/media-mediabunny';
 import { runPreflight } from './preflight.js';
-import { createWriterSession } from './writers.js';
+import { createWriterSession, toExportDiagnostic } from './writers.js';
 import { buildManifest } from './manifest.js';
 import { mixAudioBlockCanonical, BlockMixResult } from './blockmix.js';
 import { renderCaptionsSidecar } from './captions.js';
@@ -68,6 +68,7 @@ export class RendererSession {
   private pendingHandles = new Map<string, Promise<MediaHandle | null>>();
   private fonts: FontFace[] = [];
   private canvas: HTMLCanvasElement | null = null;
+  private compositingSurfaces: HTMLCanvasElement[] = [];
   private inspectionContext: CanvasRenderingContext2D | null = null;
   private errorState: Diagnostic | null = null;
   private imageURLs = new Map<string, string>();
@@ -83,6 +84,7 @@ export class RendererSession {
   resetResourceMeasurements(): void { this.resourcePeaks = { decodedFramesMax: this.decodedVideo.size, pcmBlockBytesMax: 0 }; }
   resourceMeasurements(): Readonly<typeof this.resourcePeaks> { return { ...this.resourcePeaks }; }
   private disposalTask: Promise<void> | null = null;
+  private initializationTask: Promise<void> | null = null;
   get metadata() { return this.compiled.metadata; }
   get composition(): CompiledCompositionImpl { return this.compiled; }
   async whenIdle(): Promise<void> { await this.frameQueue; try { await this.exportTask; } catch { /* already reported */ } }
@@ -95,6 +97,19 @@ export class RendererSession {
 
   async initialize(options?: { assets?: Record<string, Blob | File> }): Promise<void> {
     if (this.state !== 'initializing') return;
+    this.initializationTask ??= this.initializeNow(options);
+    try { await this.initializationTask; }
+    catch (failure) {
+      try { await this.dispose(); } catch {}
+      throw failure;
+    }
+  }
+
+  private checkLifetime(): void {
+    if (this.lifetime.signal.aborted) throw new DOMException('Render aborted', 'AbortError');
+  }
+
+  private async initializeNow(options?: { assets?: Record<string, Blob | File> }): Promise<void> {
     try {
       // exact font faces registered into the layout document's font set (spec 7.5)
       const fontAssets = this.compiled.ir.assets.filter((a) => a.kind === 'font');
@@ -102,8 +117,10 @@ export class RendererSession {
         const blob = options?.assets?.[font.id] ?? this.compiled.resolvedAssets.get(font.id)?.blob;
         if (!blob) throw error('E_ASSET_FETCH', `Font ${font.id} has no frozen bytes.`);
         const bytes = await blob.arrayBuffer();
+        this.checkLifetime();
         const face = new FontFace(font.family ?? 'Htmv', bytes, { weight: font.weight ?? '400', style: font.fontStyle ?? 'normal' });
         await face.load();
+        this.checkLifetime();
         document.fonts.add(face);
         this.fonts.push(face);
         const doc = this.layout.ensureDocument(this.compiled.metadata.width, this.compiled.metadata.height);
@@ -123,6 +140,7 @@ export class RendererSession {
         if (blob) preparedImages.set(blob, { src, bitmap });
         this.imageCache.set(srcKey, bitmap);
         this.imageCache.set(src, bitmap);
+        this.checkLifetime();
         this.imageURLs.set(srcKey, src);
         this.imageSizes.set(srcKey, { width: bitmap.width, height: bitmap.height });
       }
@@ -130,19 +148,20 @@ export class RendererSession {
         const image = this.imageCache.get(node.attributes.src); if (image) this.imageCache.set(node.id, image);
       }
       // layout snapshot in the isolated document (spec 8.1 step 3)
-      const result = buildLayoutDom(this.layout, this.compiled.timing, {
+      const result = await buildLayoutDomAsync(this.layout, this.compiled.timing, {
         width: this.compiled.metadata.width,
         height: this.compiled.metadata.height,
         background: this.compiled.metadata.background,
         cssText: this.layoutCss,
         rootFontPx: 16, imageURLs: this.imageURLs, imageSizes: this.imageSizes
       });
+      this.checkLifetime();
       this.boxIndex = indexBoxes(result.boxes);
       if (this.compiled.fontPolicy === 'portable') {
-        const families = new Set(fontAssets.map((font) => font.family));
+        const families = new Set(fontAssets.map((font) => font.family?.trim().toLowerCase()));
         for (const box of this.boxIndex.values()) if (box.kind === 'text' || box.kind === 'captions') {
           const family = box.computed.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g, '');
-          if (!families.has(family)) throw error('E_ASSET_FETCH', `Portable rendering requires an admitted exact font for ${box.id}; ${family} is a system/fallback font.`);
+          if (!families.has(family.toLowerCase())) throw error('E_FONT_POLICY', `Portable rendering requires an admitted exact font for ${box.id}; ${family} is a system/fallback font.`);
         }
       }
       for (const node of this.compiled.timing.nodes.values()) {
@@ -153,13 +172,15 @@ export class RendererSession {
         const props = Object.freeze(JSON.parse(node.attributes['data-hv-plugin-props'] ?? '{}')) as JsonObject;
         const prepared = await plugin.prepare({ width, height, props, signal: this.lifetime.signal, diagnostic: (d) => { if (d.severity === 'error') throw d; }, readAsset: async (id) => await this.compiled.resolvedAssets.get(id)?.blob?.arrayBuffer() ?? null });
         this.pluginLeaves.set(node.id, { prepared, width, height, props });
+        this.checkLifetime();
       }
+      this.checkLifetime();
       this.state = 'ready';
     } catch (e) {
+      if (this.lifetime.signal.aborted) throw e;
       this.state = 'error';
-      this.errorState = error('E_ASSET_FETCH', `Renderer initialization failed: ${(e as Error).message}`);
-      await this.dispose();
-      throw e;
+      this.errorState = toExportDiagnostic(e, 'E_ASSET_FETCH');
+      throw this.errorState;
     }
   }
 
@@ -291,8 +312,11 @@ export class RendererSession {
     if (this.state === 'disposing' || this.state === 'disposed') return;
     this.state = 'disposing';
     this.lifetime.abort();
+    try { await this.initializationTask; } catch {}
     await this.frameQueue;
     try { await this.exportTask; } catch { /* disposal cancels an owned export */ }
+    await Promise.allSettled(this.pendingHandles.values());
+    this.pendingHandles.clear();
     this.layout.dispose();
     this.inspectionContext = null;
     for (const bitmap of new Set(this.imageCache.values())) {
@@ -316,6 +340,7 @@ export class RendererSession {
     for (const font of this.fonts) document.fonts.delete(font);
     this.fonts = [];
     if (this.canvas) this.canvas.width = this.canvas.height = 0;
+    releasePaintSurfacePool(this.compositingSurfaces);
     this.compiled.release();
     this.state = 'disposed';
   }
@@ -371,6 +396,7 @@ export class RendererSession {
         height: this.compiled.metadata.height,
         background: transparent ? 'transparent' : this.compiled.metadata.background,
         boxIndex: this.boxIndex,
+        surfacePool: this.compositingSurfaces,
         media: {
           getVideoSample: (id: string, request: MediaRequest) => this.getVideoSample(id, request),
           getImageSample: (id: string) => this.pluginSurfaces.get(id) ?? this.imageCache.get(id) ?? null
@@ -450,12 +476,17 @@ export class RendererSession {
   private decodedVideo = new Map<string, { imageSource: CanvasImageSource; frame: DecodedVideoFrame | null }>();
 
   private async ensureMediaHandle(id: string, sourceKey: string, node: { kind: string; media?: { track?: number; audioTrack?: number; trimIn: Rational; trimOut: Rational | null; rate: Rational } }): Promise<MediaHandle | null> {
+    this.checkLifetime();
     const existing = this.mediaHandles.get(id);
     if (existing) return existing;
-    const pending = this.pendingHandles.get(id); if (pending) return pending;
-    const operation = this.createMediaHandle(id, sourceKey, node);
+    const operation = this.pendingHandles.get(id) ?? this.createMediaHandle(id, sourceKey, node);
     this.pendingHandles.set(id, operation);
-    try { return await operation; } finally { this.pendingHandles.delete(id); }
+    try {
+      const handle = await operation;
+      this.checkLifetime();
+      if (handle && this.mediaHandles.get(id) !== handle) throw error('E_CODEC_DECODE', `Media reader for ${id} was released while opening.`);
+      return handle;
+    } finally { if (this.pendingHandles.get(id) === operation) this.pendingHandles.delete(id); }
   }
   private async createMediaHandle(id: string, sourceKey: string, node: { kind: string; media?: { track?: number; audioTrack?: number; trimIn: Rational; trimOut: Rational | null; rate: Rational } }): Promise<MediaHandle | null> {
     const blob = this.assetBlob(sourceKey);
@@ -486,9 +517,14 @@ export class RendererSession {
     handle.reader = adapter.adapter.open(blob ?? srcAsSource(src), opts, () => {
       if (!released) {
         released = true;
-        this.mediaHandles.delete(id);
+        if (this.mediaHandles.get(id) === handle) this.mediaHandles.delete(id);
       }
     });
+    if (released || this.lifetime.signal.aborted) {
+      try { await handle.reader.dispose(); } catch {}
+      this.checkLifetime();
+      throw error('E_CODEC_DECODE', `Media reader for ${id} was released while opening.`);
+    }
     this.mediaHandles.set(id, handle);
     return handle;
   }
@@ -529,9 +565,7 @@ export class RendererSession {
     }
     const result = await mixAudioBlockCanonical(this.compiled, this, blockStartRoot, count, meta);
     this.resourcePeaks.pcmBlockBytesMax = Math.max(this.resourcePeaks.pcmBlockBytesMax, result.pcmBlockBytes);
-    if (result.clippedSamples > 0) {
-      warnings.push(`W_AUDIO_CLIPPING: ${result.clippedSamples} sample(s) hit the final hard clamp; peak ${result.peak.toFixed(4)}.`);
-    }
+    void warnings;
     return result;
   }
 

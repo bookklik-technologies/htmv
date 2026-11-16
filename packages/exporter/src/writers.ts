@@ -2,14 +2,19 @@
  * Output writers (spec 11.4): memory/blob, FileSystemFileHandle, OPFS with
  * cleanup, library-owned SeekableWriter, and append-only fragmented streams.
  */
-import { DEFAULT_MEMORY_ADMISSION_BYTES, SeekableWriter, OutputTarget, ExportResult, RenderManifest } from './types.js';
-import { Diagnostic, error } from '@htmv/core';
+import { DEFAULT_MEMORY_ADMISSION_BYTES, SeekableWriter, OutputTarget, RenderManifest } from './types.js';
+import { CompilationError, Diagnostic, error } from '@htmv/core';
+
+export type WriterResult =
+  | { kind: 'blob'; blob: Blob }
+  | { kind: 'file'; bytesWritten: number }
+  | { kind: 'opfs'; file: File; cleanup: () => Promise<void> };
 
 export interface WriterSession {
   /** Sequential or positioned writes; the engine owns close/abort for the session. */
   write(position: bigint | null, bytes: Uint8Array): Promise<void>;
   bytesWritten(): bigint;
-  finish(): Promise<ExportResult>;
+  finish(): Promise<WriterResult>;
   abort(reason: string): Promise<void>;
 }
 
@@ -28,7 +33,7 @@ export class MemoryWriterSession implements WriterSession {
     const start = position ?? this.position;
     const end = start + BigInt(bytes.byteLength);
     if (start < 0n || end > BigInt(this.maxBytes)) {
-      throw new Error('E_RESOURCE_LIMIT: in-memory output exceeded the admission estimate; use an explicit streaming target or raise maxBytes.');
+      throw error('E_RESOURCE_LIMIT', 'In-memory output exceeded the admission estimate; use an explicit streaming target or raise maxBytes.');
     }
     const PAGE = 65536;
     for (let offset = 0; offset < bytes.length;) {
@@ -41,11 +46,10 @@ export class MemoryWriterSession implements WriterSession {
   bytesWritten(): bigint {
     return this.position;
   }
-  async finish(): Promise<ExportResult> {
+  async finish(): Promise<WriterResult> {
     return {
       kind: 'blob',
       blob: new Blob(Array.from({ length: Math.ceil(Number(this.position) / 65536) }, (_, i) => (this.chunks.get(i) ?? new Uint8Array(65536)).slice(0, Math.min(65536, Number(this.position) - i * 65536))) as BlobPart[]),
-      manifest: {} as RenderManifest
     };
   }
   async abort(_reason: string): Promise<void> {
@@ -55,6 +59,7 @@ export class MemoryWriterSession implements WriterSession {
 }
 
 export class OpfsWriterSession implements WriterSession {
+  private finished = false;
   private handle: FileSystemFileHandle | null = null;
   private access: FileSystemWritableFileStream | null = null;
   private position = 0n;
@@ -63,6 +68,7 @@ export class OpfsWriterSession implements WriterSession {
     this.name = `${name || 'htmv-export'}-${crypto.randomUUID()}.tmp`;
   }
   async ensure(): Promise<void> {
+    if (this.finished) throw error('E_WRITER', 'OPFS output is already finalized.');
     if (this.access) return;
     const root = await navigator.storage.getDirectory();
     this.handle = await root.getFileHandle(this.name, { create: true });
@@ -77,12 +83,13 @@ export class OpfsWriterSession implements WriterSession {
   bytesWritten(): bigint {
     return this.position;
   }
-  async finish(): Promise<ExportResult> {
+  async finish(): Promise<WriterResult> {
     await this.ensure();
     await this.access!.truncate(Number(this.position));
     await this.access!.close();
     this.access = null;
     const file = await this.handle!.getFile();
+    this.finished = true;
     return {
       kind: 'opfs',
       file,
@@ -94,10 +101,10 @@ export class OpfsWriterSession implements WriterSession {
           // OPFS eviction/site-data clearing can remove files first (spec 11.4/S10)
         }
       },
-      manifest: {} as RenderManifest
     };
   }
   async abort(reason: string): Promise<void> {
+    if (this.finished) return;
     try {
       await this.access?.abort(reason);
     } catch {
@@ -129,11 +136,11 @@ export class FileHandleWriterSession implements WriterSession {
   bytesWritten(): bigint {
     return this.position;
   }
-  async finish(): Promise<ExportResult> {
+  async finish(): Promise<WriterResult> {
     this.stream ??= await this.handle.createWritable();
     await this.stream.truncate(Number(this.position));
     await this.stream.close(); this.stream = null;
-    return { kind: 'file', bytesWritten: Number(this.position), manifest: {} as RenderManifest };
+    return { kind: 'file', bytesWritten: Number(this.position) };
   }
   async abort(reason: string): Promise<void> {
     await this.stream?.abort(reason); this.stream = null;
@@ -154,9 +161,9 @@ export class SeekableWriterSession implements WriterSession {
   bytesWritten(): bigint {
     return this.position;
   }
-  async finish(): Promise<ExportResult> {
+  async finish(): Promise<WriterResult> {
     await this.writer.close();
-    return { kind: 'file', bytesWritten: Number(this.position), manifest: {} as RenderManifest };
+    return { kind: 'file', bytesWritten: Number(this.position) };
   }
   async abort(reason: string): Promise<void> {
     await this.writer.abort(reason);
@@ -170,16 +177,16 @@ export class AppendOnlyWriterSession implements WriterSession {
     this.writer = stream.getWriter();
   }
   async write(position: bigint | null, bytes: Uint8Array): Promise<void> {
-    if (position !== null && position !== this.position) throw new Error('E_WRITER: append-only output cannot seek.');
+    if (position !== null && position !== this.position) throw error('E_WRITER', 'Append-only output cannot seek.');
     await this.writer.write(bytes);
     this.position += BigInt(bytes.byteLength);
   }
   bytesWritten(): bigint {
     return this.position;
   }
-  async finish(): Promise<ExportResult> {
+  async finish(): Promise<WriterResult> {
     await this.writer.close();
-    return { kind: 'file', bytesWritten: Number(this.position), manifest: {} as RenderManifest };
+    return { kind: 'file', bytesWritten: Number(this.position) };
   }
   async abort(reason: string): Promise<void> {
     try {
@@ -206,11 +213,23 @@ export async function createWriterSession(target: OutputTarget): Promise<WriterS
 }
 
 export function writerQuotaError(e: unknown): Diagnostic {
-  const err = e as Error;
-  if (/quota|storage/i.test(err.message ?? '')) {
-    return error('E_STORAGE_QUOTA', `Storage quota unavailable: ${err.message}`);
+  const diagnostic = toExportDiagnostic(e, 'E_WRITER');
+  if (diagnostic !== e && diagnostic.code === 'E_WRITER' && /quota|storage/i.test(diagnostic.message)) {
+    return error('E_STORAGE_QUOTA', `Storage quota unavailable: ${diagnostic.message}`);
   }
-  return error('E_WRITER', `Output write failed: ${err.message}`);
+  return diagnostic;
+}
+
+export function toExportDiagnostic(reason: unknown, code: string): Diagnostic {
+  if (reason instanceof CompilationError && reason.diagnostics.length) {
+    return reason.diagnostics.find((diagnostic) => diagnostic.severity === 'error') ?? reason.diagnostics[0];
+  }
+  if (reason !== null && typeof reason === 'object' && 'code' in reason && typeof reason.code === 'string'
+    && 'message' in reason && typeof reason.message === 'string' && 'severity' in reason
+    && (reason.severity === 'error' || reason.severity === 'warning' || reason.severity === 'info')
+    && 'recoverable' in reason && typeof reason.recoverable === 'boolean') return reason as Diagnostic;
+  const message = reason !== null && typeof reason === 'object' && 'message' in reason ? String(reason.message) : String(reason);
+  return error(code, message);
 }
 
 // Minimal OPFS sync access handle surface (lib DOM may lag the spec)

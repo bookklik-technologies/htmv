@@ -41,7 +41,7 @@ export async function mountDemo(config) {
   const main = document.createElement('main'); main.className = 'page';
   main.innerHTML = `
     <header class="page-header"><a class="wordmark" href="../index.html"><img src="../shared/brand/logo.svg" alt="">HTMV</a><span class="eyebrow">CAPABILITIES IN MOTION</span><a class="header-link" href="../index.html">All examples ↗</a></header>
-    <section class="intro-heading"><p class="eyebrow">${escape(config.tag)}</p><h1>${escape(config.title)}</h1><p class="description">${escape(config.description)}</p></section>
+    <section class="intro-heading">${config.tag ? `<p class="eyebrow">${escape(config.tag)}</p>` : ''}<h1>${escape(config.title)}</h1><p class="description">${escape(config.description)}</p></section>
     <div class="workspace ${config.form ? '' : 'solo'}"><section aria-label="Composition preview"><div class="screen"></div>
       <div class="video-meta"><span id="format">Preparing composition</span><output id="timecode" aria-label="Exact frame time"></output></div>
       <div class="toolbar"><button data-action="replay">Replay</button><button data-action="previous" aria-label="Previous frame">← Frame</button><button data-action="next" aria-label="Next frame">Frame →</button><button data-action="still">Download PNG</button>${config.captions ? '<button data-action="captions">Download WebVTT</button>' : ''}${config.verify ? '<button data-action="verify">Verify repeatable frame</button>' : ''}</div>
@@ -116,7 +116,9 @@ export async function mountDemo(config) {
   };
   const apply = async (values) => {
     if (controller) return;
-    const candidate = buildSource(values);
+    let candidate;
+    try { candidate = buildSource(values); }
+    catch (error) { showError(error); return; }
     if (ready && candidate === currentSource) { status.textContent = 'Already showing these inputs. Ready to play or export.'; return; }
     const token = ++generation;
     compilation?.abort(); compilation = new AbortController();
@@ -240,6 +242,10 @@ export async function mountDemo(config) {
     event.preventDefault();
     if (busy) return;
     for (const input of form.querySelectorAll('input')) { input.value = input.defaultValue; input.checked = input.defaultChecked; }
+    for (const select of form.querySelectorAll('select')) {
+      select.selectedIndex = [...select.options].findIndex((option) => option.defaultSelected);
+      if (select.selectedIndex < 0) select.selectedIndex = 0;
+    }
     void apply(config.read(new FormData(form)));
   });
   if (config.pluginSource) $('#plugin-source').textContent = config.pluginSource;

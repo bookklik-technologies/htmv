@@ -1,6 +1,6 @@
 # Examples
 
-Six working examples demonstrate HTMV's authoring, playback, and export capabilities.
+Seven working examples demonstrate HTMV's authoring, playback, and export capabilities.
 They share a responsive studio page and ship all required media and fonts locally.
 
 ```sh
@@ -16,6 +16,7 @@ repository root also works; opening files directly from disk does not.
 
 | Example | Try it | Actual HTMV capabilities |
 |---|---|---|
+| `creative-studio` | Switch layouts, formats, palettes, icons, and shapes; copy the source | Twelve independent layout strategies, three aspect ratios, deterministic animation, export-safe SenangStart SVG images |
 | `hello` | Edit the headline, replay, step one frame | HTML/CSS composition, declarative opacity/translation, automatic player updates |
 | `data-template` | Change three labels and values; Apply or Reset | Typed JSON props, repeated components, scoped IDs, animated numbers, revision replacement |
 | `edited-story` | Play with sound, change music gain, download captions | Decoded video trims, crossfade, layered audio, repeat/fades/gain, burned-in cues and WebVTT |
@@ -27,6 +28,25 @@ Every example provides a collapsible, copyable composition source view reflectin
 the currently applied inputs. Plugin pages also show the trusted application
 JavaScript required to register their renderer. Apply creates a new revision;
 failed validation keeps the last working preview and source.
+
+## Creative studio
+
+Open `/examples/creative-studio/index.html`. Editorial split, type-led poster,
+orbital composition, cut-paper collage, modular gallery, diagonal banner,
+pull-quote editorial, event ticket, three-step journey, object showcase, kinetic
+type bands, and illustrated report use different spatial structures rather than
+only swapping colors. Each adapts to
+landscape, portrait, and square video. Edit the headline, supporting line, and
+four independent palette colors. Search the bundled icon and shape names; the
+style selector shows only variants available for the selected shape.
+
+The example includes 357 SenangStart icons and 302 shapes (496 variant assets),
+bundled locally by `npm run build`, with no runtime CDN or icon-font dependency.
+The optional `/senangstart` API converts selected assets into self-contained SVG
+image sources that enter HTMV's normal asset pipeline. See
+[creative compositions](./guide/creative-compositions.md) for API usage and
+freeform authoring beyond the example's starting layouts. Bundled third-party
+licenses are included in `dist/senangstart.LICENSE.txt`.
 
 ## The one-minute film
 

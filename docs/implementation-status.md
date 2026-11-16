@@ -1,9 +1,9 @@
 # Implementation and validation status
 
 This page separates implemented behavior and regression coverage from the
-validation still needed for release. The formal requirements are defined in
+validation still needed for release. The implementation-derived working contract is in
 [`SPEC.md`](https://github.com/bookklik-technologies/htmv/blob/main/SPEC.md),
-especially the release criteria in §16. Passing a local test suite
+not the missing historical revision 1.0 or its unrecovered §16 criteria. Passing a local test suite
 does not establish certification across browsers, operating systems, or codecs.
 
 ## Implemented behavior
@@ -107,7 +107,9 @@ owning server-process shutdown in restricted Windows environments.
 
 ## Remaining release evidence
 
-- The full T01–T34 matrix still needs certification, including independent pixel
+- The original v1 specification and authoritative T01–T34 definitions must be
+  recovered before formal conformance can be claimed. The full matrix still
+  needs certification, including independent pixel
   references and numerical resampler references. Existing regression tests do
   not certify every fixture.
 - Impulse/flash roundtrip measurements and ten-minute drift measurements must be

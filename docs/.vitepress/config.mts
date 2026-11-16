@@ -47,6 +47,7 @@ export default defineConfig({
             { text: 'Layers, series & transitions', link: '/guide/layers-transitions' },
             { text: 'Animation', link: '/guide/animation' },
             { text: 'Templates & data binding', link: '/guide/templates' },
+            { text: 'Creative layouts & SenangStart', link: '/guide/creative-compositions' },
             { text: 'Text and CSS', link: '/guide/text-and-css' }
           ]
         },

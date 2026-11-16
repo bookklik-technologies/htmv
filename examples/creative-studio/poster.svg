@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <rect width="640" height="360" fill="#f5f0e8"/>
+  <rect width="345" height="360" fill="#dfb96e"/>
+  <path d="M486 65 504 124 565 107 548 166 605 189 547 211 565 272 505 254 484 313 463 254 403 272 421 211 363 189 421 167 403 107 463 125Z" fill="#cf492e"/>
+  <g fill="#232c28" font-family="sans-serif" font-weight="700" font-size="42">
+    <text x="34" y="122">Make room</text>
+    <text x="34" y="170">for different.</text>
+  </g>
+  <text x="36" y="293" fill="#232c28" font-family="sans-serif" font-size="16">Layouts, shapes, icons. Your direction.</text>
+</svg>
